@@ -94,14 +94,14 @@ Sesuai dengan prinsip dasar *troubleshooting* di Modul 6, ketika sistem AntiKopa
 
 **Contoh Rancangan Pesan Error yang Ramah Pengguna:**
 
-- **Skenario 1: Jika koneksi internet terputus atau sistem gagal memuat dari OpenAlex:**
+**Skenario 1: Jika koneksi internet terputus atau sistem gagal memuat dari OpenAlex:**
 
-  > **"Koneksi Terputus"**
-  >
-  > *"Sistem kami kesulitan terhubung ke pangkalan data literatur saat ini. Yuk, pastikan lagi sambungan WiFi atau kuota internet kamu berjalan lancar. Kalau sudah stabil, silakan klik tombol **'Muat Ulang Pengecekan'** di bawah ini."*
+   **"Koneksi Terputus"**
+  
+   *"Sistem kami kesulitan terhubung ke pangkalan data literatur saat ini. Yuk, pastikan lagi sambungan WiFi atau kuota internet kamu berjalan lancar. Kalau sudah stabil, silakan klik tombol **'Muat Ulang Pengecekan'** di bawah ini."*
 
-- **Skenario 2: Jika file dokumen gagal dibaca oleh sistem ekstraksi teks:**
+**Skenario 2: Jika file dokumen gagal dibaca oleh sistem ekstraksi teks:**
 
-  > **"Gagal Membaca Dokumen"**
-  >
-  > *"Teks di dalam file kamu tidak bisa diproses. Mohon pastikan kembali bahwa dokumen karya tulis kamu disimpan dalam format **.PDF** atau **.DOCX**, dan pastikan file tersebut tidak terkunci oleh *password*. Silakan perbaiki file kamu lalu unggah kembali."*
+   **"Gagal Membaca Dokumen"**
+  
+   *"Teks di dalam file kamu tidak bisa diproses. Mohon pastikan kembali bahwa dokumen karya tulis kamu disimpan dalam format **.PDF** atau **.DOCX**, dan pastikan file tersebut tidak terkunci oleh *password*. Silakan perbaiki file kamu lalu unggah kembali."*
