@@ -13,11 +13,14 @@ def calculate_similarity(text1, text2):
     Menghitung semantic similarity antara dua teks.
     """
 
-    embeddings = model.encode([text1, text2])
+    embeddings = model.encode(
+        [text1, text2],
+        normalize_embeddings=True
+    )
 
     score = cosine_similarity(
-        [embeddings[0]],
-        [embeddings[1]]
+        embeddings[0].reshape(1, -1),
+        embeddings[1].reshape(1, -1)
     )[0][0]
 
     return float(score)
@@ -50,9 +53,6 @@ def compare_chunks(chunks, comparison_text, threshold=0.7):
 def compare_multiple_sources(chunks, sources, threshold=0.7):
     """
     Membandingkan setiap chunk dengan banyak sumber.
-
-    Setiap chunk akan dicari sumber dengan
-    similarity score paling tinggi.
     """
 
     results = []
@@ -90,10 +90,11 @@ def compare_multiple_sources(chunks, sources, threshold=0.7):
         })
 
     return results
+
+
 def calculate_similarity_index(results):
     """
-    Menghitung Similarity Index berdasarkan
-    chunk yang memenuhi threshold.
+    Menghitung rata-rata similarity dari chunk yang match.
     """
 
     matched_scores = []
