@@ -1,25 +1,23 @@
-from detector.services.chunking import chunk_text
+from detector.services.chunking import split_into_chunks
 
 
 text = """
-Penggunaan media sosial telah berkembang pesat dalam kehidupan masyarakat.
-Media sosial digunakan untuk berkomunikasi dan memperoleh informasi.
-Namun penggunaan yang berlebihan dapat memberikan dampak terhadap remaja.
-
-Remaja merupakan kelompok yang cukup aktif menggunakan media sosial.
-Penggunaan media sosial secara berlebihan dapat memengaruhi pola tidur.
-Selain itu, penggunaan yang terlalu lama dapat mengurangi aktivitas fisik.
-
-Oleh karena itu diperlukan penggunaan media sosial secara bijak.
-Orang tua dan lingkungan sekolah juga memiliki peran dalam memberikan edukasi.
+Regulasi emosi merupakan kemampuan seseorang dalam mengatur dan
+mengendalikan respons emosional ketika menghadapi berbagai situasi.
+Kemampuan ini penting bagi remaja karena pada masa perkembangan
+tersebut individu mengalami berbagai perubahan emosional dan sosial.
+Regulasi emosi yang baik membantu seseorang menghadapi tekanan,
+menyelesaikan masalah, dan berinteraksi dengan lingkungan secara lebih baik.
 """
 
 
-chunks = chunk_text(text, sentences_per_chunk=3)
+chunks = split_into_chunks(
+    text,
+    max_words=20
+)
 
-
-print("\n=== HASIL TEXT CHUNKING ===")
 
 for chunk in chunks:
-    print(f"\nChunk {chunk['chunk_id']}")
-    print(chunk["text"])
+    print("\n====================")
+    print("Chunk ID:", chunk["chunk_id"])
+    print("Text:", chunk["text"])

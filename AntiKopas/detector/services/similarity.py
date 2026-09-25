@@ -34,7 +34,6 @@ def compare_chunks(chunks, comparison_text, threshold=0.7):
     results = []
 
     for chunk in chunks:
-
         score = calculate_similarity(
             chunk["text"],
             comparison_text
@@ -52,7 +51,8 @@ def compare_chunks(chunks, comparison_text, threshold=0.7):
 
 def compare_multiple_sources(chunks, sources, threshold=0.7):
     """
-    Membandingkan setiap chunk dengan banyak sumber.
+    Membandingkan setiap chunk dengan banyak sumber
+    dan mengambil sumber dengan similarity tertinggi.
     """
 
     results = []
@@ -62,6 +62,10 @@ def compare_multiple_sources(chunks, sources, threshold=0.7):
         best_match = None
 
         for source in sources:
+
+            # Lewati sumber yang tidak memiliki teks
+            if not source.get("text"):
+                continue
 
             score = calculate_similarity(
                 chunk["text"],
@@ -73,8 +77,11 @@ def compare_multiple_sources(chunks, sources, threshold=0.7):
                 or score > best_match["similarity_score"]
             ):
                 best_match = {
-                    "source_id": source["source_id"],
-                    "title": source["title"],
+                    "source_id": source.get("source_id"),
+                    "title": source.get("title"),
+                    "year": source.get("year"),
+                    "doi": source.get("doi"),
+                    "url": source.get("url"),
                     "similarity_score": score
                 }
 
@@ -112,3 +119,37 @@ def calculate_similarity_index(results):
         return 0.0
 
     return sum(matched_scores) / len(matched_scores)
+
+def rank_sources(chunks, sources, max_results=20):
+    source_results = []
+
+    for source in sources:
+        if not source.get("text"):
+            continue
+
+        best_score = 0.0
+
+        for chunk in chunks:
+            score = calculate_similarity(
+                chunk["text"],
+                source["text"]
+            )
+
+            if score > best_score:
+                best_score = score
+
+        source_results.append({
+            "source_id": source.get("source_id"),
+            "title": source.get("title"),
+            "year": source.get("year"),
+            "doi": source.get("doi"),
+            "url": source.get("url"),
+            "similarity_score": best_score
+        })
+
+    source_results.sort(
+        key=lambda x: x["similarity_score"],
+        reverse=True
+    )
+
+    return source_results[:max_results]
