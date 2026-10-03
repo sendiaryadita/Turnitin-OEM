@@ -7,13 +7,7 @@ from django.conf import settings
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 
-from .services.openalex import search_literature
-from .services.similarity import (
-    compare_multiple_sources,
-    calculate_similarity_index,
-    rank_sources
-)
-from .services.chunking import split_into_chunks
+from .services.antikopas_service import analyze_antikopas
 from .services.document_parser import extract_text
 from .services.report_generator import generate_report
 
@@ -28,8 +22,13 @@ def health_check(request):
 
 @api_view(["POST"])
 def detect_similarity(request):
+
     title = request.data.get("title")
     uploaded_file = request.FILES.get("file")
+
+    # =========================
+    # VALIDASI TITLE
+    # =========================
 
     if not title:
         return Response({
@@ -37,13 +36,20 @@ def detect_similarity(request):
             "message": "title wajib dikirim"
         }, status=400)
 
+    # =========================
+    # VALIDASI FILE
+    # =========================
+
     if not uploaded_file:
         return Response({
             "status": "error",
             "message": "file wajib dikirim"
         }, status=400)
 
-    # Ekstrak teks PDF/DOCX
+    # =========================
+    # EXTRACT TEXT
+    # =========================
+
     try:
         text = extract_text(uploaded_file)
 
@@ -56,65 +62,85 @@ def detect_similarity(request):
     except Exception as e:
         return Response({
             "status": "error",
-            "message": f"Gagal membaca file: {str(e)}"
+            "message": (
+                f"Gagal membaca file: {str(e)}"
+            )
         }, status=400)
 
     if not text or not text.strip():
         return Response({
             "status": "error",
-            "message": "Isi dokumen tidak dapat dibaca"
+            "message": (
+                "Isi dokumen tidak dapat dibaca"
+            )
         }, status=400)
 
-    # Cari literatur menggunakan judul
-    sources = search_literature(
-        title,
-        per_page=20
-    )
+    # =========================
+    # AI ANALYSIS
+    # =========================
 
-    # Chunking
-    chunks = split_into_chunks(
-        text,
-        max_words=100
-    )
+    try:
+        analysis = analyze_antikopas(
+            text,
+            title
+        )
 
-    # Similarity
-    results = compare_multiple_sources(
-        chunks,
-        sources,
-        threshold=0.7
-    )
+    except Exception as e:
+        return Response({
+            "status": "error",
+            "message": (
+                f"Gagal melakukan analisis AI: {str(e)}"
+            )
+        }, status=500)
 
-    # Ranking maksimal 20 jurnal
-    ranked_sources = rank_sources(
-        chunks,
-        sources,
-        max_results=20
-    )
+    similarity_index = analysis[
+        "similarity_index"
+    ]
 
-    similarity_index = calculate_similarity_index(
-        results
-    )
+    total_chunks = analysis[
+        "total_chunks"
+    ]
 
-    matched_chunks = sum(
-        1
-        for result in results
-        if result["best_match"]
-        and result["best_match"]["is_match"]
-    )
+    matched_chunks = analysis[
+        "matched_chunks"
+    ]
 
-    # Kumpulkan matched sources
+    document_results = analysis[
+        "chunks"
+    ]
+
+    # =========================
+    # COLLECT MATCHED SOURCES
+    # =========================
+
     matched_sources = []
 
-    for result in results:
-        match = result["best_match"]
+    for chunk in document_results:
 
-        if match and match["is_match"]:
+        matches = chunk.get(
+            "matches",
+            []
+        )
+
+        for match in matches:
+
+            if not match.get("matched"):
+                continue
+
             source_data = {
-                "title": match["title"],
-                "year": match["year"],
-                "doi": match["doi"],
-                "url": match["url"],
-                "similarity_score": match["similarity_score"]
+                "title": match.get("title"),
+                "year": match.get("year"),
+                "doi": match.get("doi"),
+                "url": match.get("url"),
+                "minilm_score": match.get(
+                    "minilm_score"
+                ),
+                "cross_score": match.get(
+                    "cross_score"
+                ),
+                "similarity_score": match.get(
+                    "cross_score"
+                )
             }
 
             source_key = (
@@ -124,16 +150,21 @@ def detect_similarity(request):
             )
 
             existing_keys = [
-                source["doi"]
-                or source["url"]
-                or source["title"]
+                source.get("doi")
+                or source.get("url")
+                or source.get("title")
                 for source in matched_sources
             ]
 
             if source_key not in existing_keys:
-                matched_sources.append(source_data)
+                matched_sources.append(
+                    source_data
+                )
 
-    # Folder report
+    # =========================
+    # CREATE REPORT DIRECTORY
+    # =========================
+
     report_directory = os.path.join(
         settings.BASE_DIR,
         "reports"
@@ -144,7 +175,10 @@ def detect_similarity(request):
         exist_ok=True
     )
 
-    # Nama report unik
+    # =========================
+    # REPORT FILENAME
+    # =========================
+
     timestamp = datetime.now().strftime(
         "%Y%m%d_%H%M%S"
     )
@@ -158,44 +192,85 @@ def detect_similarity(request):
         report_filename
     )
 
-    # Generate PDF
-    generate_report(
-        output_path=report_path,
-        title=title,
-        similarity_index=similarity_index,
-        total_chunks=len(chunks),
-        matched_chunks=matched_chunks,
-        matched_sources=matched_sources
-    )
+    # =========================
+    # GENERATE PDF
+    # =========================
 
-    # URL download report
+    try:
+
+        generate_report(
+            output_path=report_path,
+            title=title,
+
+            # similarity_index dari sistem
+            # berada pada skala 0-100
+            similarity_index=(
+                similarity_index / 100
+            ),
+
+            total_chunks=total_chunks,
+            matched_chunks=matched_chunks,
+            matched_sources=matched_sources
+        )
+
+    except Exception as e:
+        return Response({
+            "status": "error",
+            "message": (
+                f"Gagal membuat report PDF: {str(e)}"
+            )
+        }, status=500)
+
+    # =========================
+    # REPORT URL
+    # =========================
+
     report_url = request.build_absolute_uri(
         f"/api/reports/{report_filename}/"
     )
 
-    # Response hasil scanning
+    # =========================
+    # RESPONSE
+    # =========================
+
     return Response({
+
         "status": "success",
+
         "title": title,
+
         "filename": uploaded_file.name,
+
         "similarity_index": similarity_index,
-        "total_chunks": len(chunks),
+
+        "total_chunks": total_chunks,
+
         "matched_chunks": matched_chunks,
+
         "matched_sources": matched_sources,
-        "ranked_sources": ranked_sources,
+
+        "chunks": document_results,
+
         "report_filename": report_filename,
+
         "report_url": report_url
     })
 
 
 @api_view(["GET"])
-def download_report(request, filename):
+def download_report(
+    request,
+    filename
+):
+
     report_directory = os.path.join(
         settings.BASE_DIR,
         "reports"
     )
 
-    safe_filename = os.path.basename(filename)
+    safe_filename = os.path.basename(
+        filename
+    )
 
     report_path = os.path.join(
         report_directory,

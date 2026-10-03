@@ -25,17 +25,32 @@ def reconstruct_abstract(inverted_index):
 
 
 def search_literature(query, per_page=20):
+    query = " ".join(query.split())
+
+    # OpenAlex search jangan dikasih seluruh isi chunk
+    query_words = query.split()
+
+    # Buang karakter aneh dan ambil query pendek
+    query_words = [
+        word.strip(".,;:!?()[]{}\"'")
+        for word in query_words
+        if len(word.strip(".,;:!?()[]{}\"'")) > 2
+    ]
+
+    query = " ".join(query_words[:8])
 
     params = {
         "search": query,
-        "per_page": per_page,
-        "api_key": OPENALEX_API_KEY,
+        "per-page": per_page,
     }
+
+    if OPENALEX_API_KEY:
+        params["api_key"] = OPENALEX_API_KEY
 
     response = requests.get(
         OPENALEX_URL,
         params=params,
-        timeout=15
+        timeout=30
     )
 
     response.raise_for_status()
@@ -44,21 +59,16 @@ def search_literature(query, per_page=20):
 
     results = []
 
-    for work in data.get("results", []):
-
-        abstract = reconstruct_abstract(
-            work.get("abstract_inverted_index")
-        )
-
+    for item in data.get("results", []):
         results.append({
-            "source_id": work.get("id"),
-            "title": work.get("display_name"),
-            "year": work.get("publication_year"),
-            "doi": work.get("doi"),
-            "url": work.get("primary_location", {}).get(
-                "landing_page_url"
-            ),
-            "text": abstract,
+            "source_id": item.get("id"),
+            "title": item.get("display_name"),
+            "year": item.get("publication_year"),
+            "doi": item.get("doi"),
+            "url": item.get("primary_location", {}).get("landing_page_url"),
+            "text": reconstruct_abstract(
+                item.get("abstract_inverted_index")
+            )
         })
 
     return results

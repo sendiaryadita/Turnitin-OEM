@@ -1,77 +1,180 @@
-from sentence_transformers import SentenceTransformer
+from sentence_transformers import SentenceTransformer, CrossEncoder
 from sklearn.metrics.pairwise import cosine_similarity
-from sklearn.feature_extraction.text import TfidfVectorizer
+import torch
 
 
-# Load model semantic similarity
-model = SentenceTransformer(
-    "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+# ==========================================
+# 1. LOAD MODEL
+# ==========================================
+
+print("Loading embedding model...")
+
+embedding_model = SentenceTransformer(
+    "sentence-transformers/all-MiniLM-L6-v2"
 )
 
-
-def semantic_similarity(text1, text2):
-    embeddings = model.encode([text1, text2])
-
-    score = cosine_similarity(
-        [embeddings[0]],
-        [embeddings[1]]
-    )[0][0]
-
-    return float(score)
+print("Embedding model berhasil dimuat!")
 
 
-def lexical_similarity(text1, text2):
-    vectorizer = TfidfVectorizer()
+print("Loading cross encoder...")
 
-    tfidf = vectorizer.fit_transform([
-        text1,
-        text2
-    ])
+cross_encoder = CrossEncoder(
+    "cross-encoder/ms-marco-MiniLM-L6-v2",
+    activation_fn=torch.nn.Sigmoid()
+)
 
-    score = cosine_similarity(
-        tfidf[0:1],
-        tfidf[1:2]
-    )[0][0]
-
-    return float(score)
+print("Cross Encoder berhasil dimuat!\n")
 
 
-def hybrid_similarity(
-    text1,
-    text2,
-    semantic_weight=0.7,
-    lexical_weight=0.3
-):
-    semantic_score = semantic_similarity(text1, text2)
-    lexical_score = lexical_similarity(text1, text2)
+# ==========================================
+# 2. DATA SIMULASI
+# ==========================================
 
-    hybrid_score = (
-        semantic_weight * semantic_score
-        + lexical_weight * lexical_score
+document_chunks = [
+    "Kecerdasan buatan dapat membantu meningkatkan proses pembelajaran mahasiswa melalui sistem pembelajaran yang lebih adaptif.",
+
+    "Penelitian ini menggunakan metode machine learning untuk melakukan klasifikasi terhadap data yang telah dikumpulkan.",
+
+    "Sistem informasi akademik digunakan untuk membantu mahasiswa dalam mengakses jadwal dan informasi perkuliahan."
+]
+
+
+source_chunks = [
+    "Artificial intelligence dapat digunakan untuk meningkatkan proses belajar mahasiswa melalui pembelajaran adaptif.",
+
+    "Algoritma pembelajaran mesin dapat digunakan untuk mengelompokkan dan mengklasifikasikan data penelitian.",
+
+    "Sistem informasi akademik membantu mahasiswa memperoleh informasi mengenai jadwal dan kegiatan perkuliahan.",
+
+    "Rumah sakit menggunakan sistem informasi untuk mengelola data pasien dan pelayanan kesehatan."
+]
+
+
+# ==========================================
+# 3. EMBEDDING
+# ==========================================
+
+print("Membuat embedding...")
+
+document_embeddings = embedding_model.encode(
+    document_chunks,
+    normalize_embeddings=True
+)
+
+source_embeddings = embedding_model.encode(
+    source_chunks,
+    normalize_embeddings=True
+)
+
+print("Embedding selesai!\n")
+
+
+# ==========================================
+# 4. RETRIEVAL DENGAN COSINE SIMILARITY
+# ==========================================
+
+TOP_K = 2
+
+print("=== TAHAP 1: RETRIEVAL ===")
+
+for i, document_chunk in enumerate(document_chunks):
+
+    similarities = cosine_similarity(
+        [document_embeddings[i]],
+        source_embeddings
+    )[0]
+
+    # Urutkan index berdasarkan similarity tertinggi
+    ranked_indices = similarities.argsort()[::-1]
+
+    top_indices = ranked_indices[:TOP_K]
+
+    print(f"\n{'=' * 60}")
+    print(f"DOCUMENT CHUNK {i + 1}")
+    print(document_chunk)
+
+    print("\nTop kandidat berdasarkan all-MiniLM:")
+
+    for rank, source_index in enumerate(top_indices, start=1):
+
+        print(
+            f"{rank}. Source {source_index + 1}"
+            f" | Cosine: {similarities[source_index]:.4f}"
+        )
+
+        print(
+            f"   {source_chunks[source_index]}"
+        )
+
+
+# ==========================================
+# 5. CROSS ENCODER RERANKING
+# ==========================================
+
+print("\n\n=== TAHAP 2: CROSS ENCODER ===")
+
+for i, document_chunk in enumerate(document_chunks):
+
+    similarities = cosine_similarity(
+        [document_embeddings[i]],
+        source_embeddings
+    )[0]
+
+    ranked_indices = similarities.argsort()[::-1]
+
+    top_indices = ranked_indices[:TOP_K]
+
+    # Buat pasangan document-source
+    pairs = [
+        (
+            document_chunk,
+            source_chunks[source_index]
+        )
+        for source_index in top_indices
+    ]
+
+    # Cross Encoder
+    cross_scores = cross_encoder.predict(pairs)
+
+    results = []
+
+    for j, source_index in enumerate(top_indices):
+
+        results.append({
+            "source_index": source_index,
+            "embedding_score": float(similarities[source_index]),
+            "cross_score": float(cross_scores[j])
+        })
+
+    # Urutkan berdasarkan Cross Encoder
+    results.sort(
+        key=lambda x: x["cross_score"],
+        reverse=True
     )
 
-    return {
-        "semantic_score": semantic_score,
-        "lexical_score": lexical_score,
-        "hybrid_score": hybrid_score
-    }
+    print(f"\n{'=' * 60}")
+    print(f"FINAL RANKING - DOCUMENT CHUNK {i + 1}")
+    print(document_chunk)
 
+    for rank, result in enumerate(results, start=1):
 
-# =========================
-# TEST
-# =========================
+        source_index = result["source_index"]
 
-text1 = """
-Penggunaan media sosial secara berlebihan dapat memberikan dampak terhadap kondisi remaja.
-"""
+        print(
+            f"\n{rank}. Source {source_index + 1}"
+        )
 
-text2 = """
-Proses fotosintesis pada tumbuhan membutuhkan cahaya matahari dan menghasilkan oksigen.
-"""
+        print(
+            f"   MiniLM Cosine : "
+            f"{result['embedding_score']:.4f}"
+        )
 
-result = hybrid_similarity(text1, text2)
+        print(
+            f"   Cross Encoder : "
+            f"{result['cross_score']:.4f}"
+        )
 
-print("\n=== HASIL HYBRID SIMILARITY ===")
-print(f"Semantic Score : {result['semantic_score']:.4f}")
-print(f"Lexical Score  : {result['lexical_score']:.4f}")
-print(f"Hybrid Score   : {result['hybrid_score']:.4f}")
+        print(
+            f"   Text          : "
+            f"{source_chunks[source_index]}"
+        )
