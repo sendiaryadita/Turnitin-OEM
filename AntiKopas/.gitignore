@@ -1,0 +1,45 @@
+
+# =====================================
+# ANTIKOPAS - GIT IGNORE
+# =====================================
+
+# Python cache
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Secrets dan konfigurasi lokal
+.env
+.env.*
+!.env.example
+*.key
+
+# Django local database
+db.sqlite3
+db.sqlite3-journal
+
+# Generated PDF reports
+reports/
+
+# Dokumen testing lokal
+testing_documents/
+
+# Model AI lokal (bobot besar)
+models/
+
+# Log dan file sementara
+*.log
+*.tmp
+*.bak
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/

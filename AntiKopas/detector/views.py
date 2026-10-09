@@ -1,3 +1,4 @@
+
 import os
 from datetime import datetime
 
@@ -12,6 +13,10 @@ from .services.document_parser import extract_text
 from .services.report_generator import generate_report
 
 
+# ==========================================
+# 1. HEALTH CHECK
+# ==========================================
+
 @api_view(["GET"])
 def health_check(request):
     return Response({
@@ -20,25 +25,35 @@ def health_check(request):
     })
 
 
+# ==========================================
+# 2. DETECT SIMILARITY
+# ==========================================
+
 @api_view(["POST"])
 def detect_similarity(request):
+
+    # --------------------------------------
+    # A. AMBIL INPUT
+    # --------------------------------------
 
     title = request.data.get("title")
     uploaded_file = request.FILES.get("file")
 
-    # =========================
-    # VALIDASI TITLE
-    # =========================
+    # --------------------------------------
+    # B. VALIDASI TITLE
+    # --------------------------------------
 
-    if not title:
+    if not title or not str(title).strip():
         return Response({
             "status": "error",
             "message": "title wajib dikirim"
         }, status=400)
 
-    # =========================
-    # VALIDASI FILE
-    # =========================
+    title = str(title).strip()
+
+    # --------------------------------------
+    # C. VALIDASI FILE
+    # --------------------------------------
 
     if not uploaded_file:
         return Response({
@@ -46,9 +61,9 @@ def detect_similarity(request):
             "message": "file wajib dikirim"
         }, status=400)
 
-    # =========================
-    # EXTRACT TEXT
-    # =========================
+    # --------------------------------------
+    # D. EKSTRAKSI DOKUMEN
+    # --------------------------------------
 
     try:
         text = extract_text(uploaded_file)
@@ -67,17 +82,15 @@ def detect_similarity(request):
             )
         }, status=400)
 
-    if not text or not text.strip():
+    if not text or not str(text).strip():
         return Response({
             "status": "error",
-            "message": (
-                "Isi dokumen tidak dapat dibaca"
-            )
+            "message": "Isi dokumen tidak dapat dibaca"
         }, status=400)
 
-    # =========================
-    # AI ANALYSIS
-    # =========================
+    # --------------------------------------
+    # E. ANALISIS AI
+    # --------------------------------------
 
     try:
         analysis = analyze_antikopas(
@@ -89,9 +102,14 @@ def detect_similarity(request):
         return Response({
             "status": "error",
             "message": (
-                f"Gagal melakukan analisis AI: {str(e)}"
+                "Gagal melakukan analisis AI: "
+                f"{str(e)}"
             )
         }, status=500)
+
+    # --------------------------------------
+    # F. AMBIL HASIL ANALISIS
+    # --------------------------------------
 
     similarity_index = analysis[
         "similarity_index"
@@ -109,11 +127,22 @@ def detect_similarity(request):
         "chunks"
     ]
 
-    # =========================
-    # COLLECT MATCHED SOURCES
-    # =========================
+    total_similarity = analysis.get(
+        "total_similarity",
+        similarity_index
+    )
+
+    source_similarities = analysis.get(
+        "source_similarities",
+        []
+    )
+
+    # --------------------------------------
+    # G. KUMPULKAN JURNAL YANG COCOK
+    # --------------------------------------
 
     matched_sources = []
+    seen_source_keys = set()
 
     for chunk in document_results:
 
@@ -149,21 +178,27 @@ def detect_similarity(request):
                 or source_data["title"]
             )
 
-            existing_keys = [
-                source.get("doi")
-                or source.get("url")
-                or source.get("title")
-                for source in matched_sources
-            ]
+            if not source_key:
+                continue
 
-            if source_key not in existing_keys:
-                matched_sources.append(
-                    source_data
-                )
+            source_key = str(
+                source_key
+            ).strip().casefold()
 
-    # =========================
-    # CREATE REPORT DIRECTORY
-    # =========================
+            if source_key in seen_source_keys:
+                continue
+
+            seen_source_keys.add(
+                source_key
+            )
+
+            matched_sources.append(
+                source_data
+            )
+
+    # --------------------------------------
+    # H. DIREKTORI REPORT
+    # --------------------------------------
 
     report_directory = os.path.join(
         settings.BASE_DIR,
@@ -175,12 +210,12 @@ def detect_similarity(request):
         exist_ok=True
     )
 
-    # =========================
-    # REPORT FILENAME
-    # =========================
+    # --------------------------------------
+    # I. NAMA FILE REPORT
+    # --------------------------------------
 
     timestamp = datetime.now().strftime(
-        "%Y%m%d_%H%M%S"
+        "%Y%m%d_%H%M%S_%f"
     )
 
     report_filename = (
@@ -192,46 +227,81 @@ def detect_similarity(request):
         report_filename
     )
 
-    # =========================
-    # GENERATE PDF
-    # =========================
+    # --------------------------------------
+    # J. GENERATE PDF REPORT LENGKAP
+    # --------------------------------------
 
     try:
-
         generate_report(
+
             output_path=report_path,
+
             title=title,
 
-            # similarity_index dari sistem
-            # berada pada skala 0-100
+            # Fungsi report menerima rasio 0-1.
+            # Nilai dari API berada pada skala
+            # persentase 0-100.
             similarity_index=(
-                similarity_index / 100
+                float(similarity_index) / 100.0
             ),
 
             total_chunks=total_chunks,
+
             matched_chunks=matched_chunks,
-            matched_sources=matched_sources
+
+            matched_sources=matched_sources,
+
+            # =================================
+            # FITUR BARU STEP 4B
+            # =================================
+
+            # Persentase dan jumlah chunk
+            # yang cocok untuk setiap jurnal.
+            source_similarities=source_similarities,
+
+            # Teks dokumen, matched source,
+            # dan source_excerpt yang menjadi
+            # bukti perbandingan.
+            chunks=document_results,
+
+        )
+
+        print(
+            "[AntiKopas] PDF report berhasil:",
+            report_filename
+        )
+
+        print(
+            "[AntiKopas] Sumber:",
+            len(matched_sources)
+        )
+
+        print(
+            "[AntiKopas] Data bukti:",
+            len(document_results),
+            "chunk"
         )
 
     except Exception as e:
         return Response({
             "status": "error",
             "message": (
-                f"Gagal membuat report PDF: {str(e)}"
+                "Gagal membuat report PDF: "
+                f"{str(e)}"
             )
         }, status=500)
 
-    # =========================
-    # REPORT URL
-    # =========================
+    # --------------------------------------
+    # K. REPORT URL
+    # --------------------------------------
 
     report_url = request.build_absolute_uri(
         f"/api/reports/{report_filename}/"
     )
 
-    # =========================
-    # RESPONSE
-    # =========================
+    # --------------------------------------
+    # L. RESPONSE POSTMAN
+    # --------------------------------------
 
     return Response({
 
@@ -243,19 +313,28 @@ def detect_similarity(request):
 
         "similarity_index": similarity_index,
 
+        "total_similarity": total_similarity,
+
         "total_chunks": total_chunks,
 
         "matched_chunks": matched_chunks,
 
         "matched_sources": matched_sources,
 
+        "source_similarities": source_similarities,
+
         "chunks": document_results,
 
         "report_filename": report_filename,
 
         "report_url": report_url
+
     })
 
+
+# ==========================================
+# 3. DOWNLOAD PDF REPORT
+# ==========================================
 
 @api_view(["GET"])
 def download_report(
@@ -272,12 +351,29 @@ def download_report(
         filename
     )
 
+    # Hanya izinkan file PDF yang
+    # dibuat oleh sistem AntiKopas.
+    if (
+        not safe_filename.startswith(
+            "antikopas_report_"
+        )
+        or not safe_filename.endswith(
+            ".pdf"
+        )
+    ):
+        return Response({
+            "status": "error",
+            "message": "Nama report tidak valid"
+        }, status=400)
+
     report_path = os.path.join(
         report_directory,
         safe_filename
     )
 
-    if not os.path.exists(report_path):
+    if not os.path.isfile(
+        report_path
+    ):
         return Response({
             "status": "error",
             "message": "Report tidak ditemukan"
