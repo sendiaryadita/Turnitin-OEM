@@ -1,10 +1,10 @@
 
 """
-ANTI KOPAS
-Professional Similarity Report Generator
-STEP 4 - PDF Report Upgrade
+ANTIKOPAS
+PDF Similarity Report Generator
+Cloudflare BGE-M3 + Academic CrossEncoder V2
 
-Kompatibel dengan pemanggilan lama:
+Kompatibel dengan views.py:
 
 generate_report(
     output_path,
@@ -13,50 +13,34 @@ generate_report(
     total_chunks,
     matched_chunks,
     matched_sources,
+    source_similarities=None,
+    chunks=None,
 )
 
-Fitur tambahan opsional:
-
-generate_report(
-    ...,
-    source_similarities=source_similarities,
-    chunks=chunks,
-)
-
-Ketika data tambahan tidak dikirim,
-PDF tetap dapat dibuat tanpa error.
+Catatan:
+- Similarity Index = cakupan chunk cocok.
+- Bukan persentase plagiarisme.
+- Skor embedding dan CrossEncoder bukan persentase.
+- Bukti berasal dari hasil pipeline, bukan teks buatan.
 """
 
 import re
-
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse
 from xml.sax.saxutils import escape, quoteattr
 
 from reportlab.lib import colors
-from reportlab.lib.enums import (
-    TA_CENTER,
-    TA_LEFT,
-    TA_RIGHT,
-)
-
+from reportlab.lib.enums import TA_CENTER, TA_LEFT
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import (
-    getSampleStyleSheet,
     ParagraphStyle,
+    getSampleStyleSheet,
 )
-
 from reportlab.lib.units import mm
-
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
-
-from reportlab.graphics.shapes import (
-    Drawing,
-    Rect,
-)
-
+from reportlab.graphics.shapes import Drawing, Rect
 from reportlab.platypus import (
     SimpleDocTemplate,
     Paragraph,
@@ -64,14 +48,14 @@ from reportlab.platypus import (
     Table,
     TableStyle,
     HRFlowable,
-    KeepTogether,
     CondPageBreak,
+    KeepTogether,
 )
 
 
-# ==========================================
-# 1. WARNA DAN KONFIGURASI
-# ==========================================
+# ==================================================
+# 1. KONFIGURASI
+# ==================================================
 
 NAVY = colors.HexColor("#152B45")
 BLUE = colors.HexColor("#2369A8")
@@ -82,9 +66,7 @@ LIGHT_GRAY = colors.HexColor("#F3F6F9")
 
 DARK_TEXT = colors.HexColor("#263445")
 MUTED = colors.HexColor("#637487")
-
 BORDER = colors.HexColor("#DCE4ED")
-WHITE = colors.white
 
 PAGE_WIDTH, PAGE_HEIGHT = A4
 
@@ -94,27 +76,18 @@ TOP_MARGIN = 26 * mm
 BOTTOM_MARGIN = 23 * mm
 
 CONTENT_WIDTH = (
-    PAGE_WIDTH
-    - LEFT_MARGIN
-    - RIGHT_MARGIN
+    PAGE_WIDTH - LEFT_MARGIN - RIGHT_MARGIN
 )
 
 MAX_EVIDENCE_PER_SOURCE = 2
 MAX_EVIDENCE_CHARACTERS = 650
 
 
-# ==========================================
+# ==================================================
 # 2. FONT
-# ==========================================
+# ==================================================
 
 def setup_fonts():
-    """
-    Menggunakan font Unicode jika ada.
-
-    Aman untuk Windows.
-    Fallback menggunakan Helvetica.
-    """
-
     candidates = [
         (
             Path("C:/Windows/Fonts/arial.ttf"),
@@ -136,12 +109,8 @@ def setup_fonts():
         ),
     ]
 
-    for regular_path, bold_path in candidates:
-
-        if not (
-            regular_path.is_file()
-            and bold_path.is_file()
-        ):
+    for regular, bold in candidates:
+        if not regular.is_file() or not bold.is_file():
             continue
 
         try:
@@ -151,7 +120,7 @@ def setup_fonts():
                 pdfmetrics.registerFont(
                     TTFont(
                         "AntiKopas-Regular",
-                        str(regular_path),
+                        str(regular),
                     )
                 )
 
@@ -161,7 +130,7 @@ def setup_fonts():
                 pdfmetrics.registerFont(
                     TTFont(
                         "AntiKopas-Bold",
-                        str(bold_path),
+                        str(bold),
                     )
                 )
 
@@ -173,16 +142,10 @@ def setup_fonts():
                 boldItalic="AntiKopas-Bold",
             )
 
-            return (
-                "AntiKopas-Regular",
-                "AntiKopas-Bold",
-            )
+            return "AntiKopas-Regular", "AntiKopas-Bold"
 
         except Exception as error:
-            print(
-                "[Report] Font fallback:",
-                str(error),
-            )
+            print("[Report] Font fallback:", error)
 
     return "Helvetica", "Helvetica-Bold"
 
@@ -190,33 +153,11 @@ def setup_fonts():
 FONT_REGULAR, FONT_BOLD = setup_fonts()
 
 
-# ==========================================
+# ==================================================
 # 3. HELPER
-# ==========================================
-
-def safe_text(value, default="-"):
-    """
-    Membersihkan nilai sebelum digunakan
-    pada ReportLab Paragraph.
-    """
-
-    if value is None:
-        return default
-
-    text = re.sub(
-        r"\s+",
-        " ",
-        str(value),
-    ).strip()
-
-    return escape(text) if text else default
-
+# ==================================================
 
 def readable_text(value, limit=None):
-    """
-    Menghasilkan teks biasa yang rapi.
-    """
-
     text = re.sub(
         r"\s+",
         " ",
@@ -229,18 +170,21 @@ def readable_text(value, limit=None):
     return text
 
 
+def safe_text(value, default="-"):
+    text = readable_text(value)
+    return escape(text) if text else default
+
+
 def safe_number(value, default=0.0):
     try:
-        number = float(value)
+        result = float(value)
 
         if not (
-            float("-inf")
-            < number
-            < float("inf")
+            float("-inf") < result < float("inf")
         ):
             return default
 
-        return number
+        return result
 
     except (TypeError, ValueError):
         return default
@@ -248,27 +192,18 @@ def safe_number(value, default=0.0):
 
 def percentage_value(value):
     """
-    Mendukung:
-    0.50 -> 50%
-    50.0 -> 50%
+    Mendukung pemanggilan lama:
+    0.50 -> 50.00
 
-    Generator lama menggunakan rasio 0-1.
-    JSON API menggunakan persen 0-100.
+    Dan nilai API:
+    50.0 -> 50.00
     """
-
     number = safe_number(value)
 
     if 0 <= number <= 1:
         number *= 100
 
-    return max(
-        0.0,
-        min(100.0, number),
-    )
-
-
-def format_percentage(value):
-    return f"{value:.2f}%"
+    return max(0.0, min(100.0, number))
 
 
 def valid_url(value):
@@ -279,24 +214,16 @@ def valid_url(value):
 
     parsed = urlparse(url)
 
-    if (
-        parsed.scheme.lower()
-        not in ("http", "https")
+    if parsed.scheme.lower() not in (
+        "http",
+        "https",
     ):
         return ""
 
-    if not parsed.netloc:
-        return ""
-
-    return url
+    return url if parsed.netloc else ""
 
 
 def url_paragraph(value, style):
-    """
-    Membuat tautan DOI/URL aman
-    untuk ReportLab Paragraph.
-    """
-
     url = valid_url(value)
 
     if not url:
@@ -305,23 +232,18 @@ def url_paragraph(value, style):
             style,
         )
 
-    label = safe_text(url)
-
     markup = (
-        f"<link href={quoteattr(url)}"
-        f" color='#2369A8'>"
-        f"{label}"
+        f"<link href={quoteattr(url)} "
+        f"color='#2369A8'>"
+        f"{safe_text(url)}"
         "</link>"
     )
 
-    return Paragraph(
-        markup,
-        style,
-    )
+    return Paragraph(markup, style)
 
 
 def normalized_doi(value):
-    doi = str(value or "").strip().lower()
+    doi = str(value or "").strip().casefold()
 
     doi = re.sub(
         r"^(?:https?://(?:dx\.)?doi\.org/"
@@ -333,92 +255,39 @@ def normalized_doi(value):
     return doi.rstrip(".,;)]}")
 
 
-def source_identity(source):
-    """
-    Identitas untuk memasangkan
-    sumber dengan informasi detail.
-    """
-
-    if not isinstance(source, dict):
-        return ""
-
-    doi = normalized_doi(
-        source.get("doi")
-    )
-
-    if doi:
-        return "doi:" + doi
-
-    openalex_id = str(
-        source.get("openalex_id")
-        or source.get("source_id")
-        or ""
-    ).strip().lower()
-
-    if openalex_id:
-        return "id:" + openalex_id
-
-    title = re.sub(
-        r"\s+",
-        " ",
-        str(source.get("title") or ""),
-    ).strip().casefold()
-
-    return "title:" + title if title else ""
-
-
 def matches_same_source(left, right):
-    """
-    Cocokkan DOI, ID OpenAlex,
-    kemudian judul sumber.
-
-    Tidak menyamakan sumber yang hanya
-    memiliki topik serupa.
-    """
-
     if not (
         isinstance(left, dict)
         and isinstance(right, dict)
     ):
         return False
 
-    left_doi = normalized_doi(
-        left.get("doi")
-    )
-
-    right_doi = normalized_doi(
-        right.get("doi")
-    )
+    left_doi = normalized_doi(left.get("doi"))
+    right_doi = normalized_doi(right.get("doi"))
 
     if left_doi and right_doi:
         return left_doi == right_doi
 
-    left_id = str(
+    left_id = readable_text(
         left.get("openalex_id")
         or left.get("source_id")
-        or ""
-    ).strip().casefold()
+    ).casefold()
 
-    right_id = str(
+    right_id = readable_text(
         right.get("openalex_id")
         or right.get("source_id")
-        or ""
-    ).strip().casefold()
+    ).casefold()
 
     if left_id and right_id:
         return left_id == right_id
 
-    left_title = re.sub(
-        r"\s+",
-        " ",
-        str(left.get("title") or ""),
-    ).strip().casefold()
+    left_title = readable_text(
+        left.get("title")
+    ).casefold()
 
-    right_title = re.sub(
-        r"\s+",
-        " ",
-        str(right.get("title") or ""),
-    ).strip().casefold()
+    right_title = readable_text(
+        right.get("title")
+    ).casefold()
 
     return bool(
         left_title
@@ -438,26 +307,62 @@ def find_source_statistics(
         return None
 
     for item in source_similarities:
-
-        if matches_same_source(
-            source,
-            item,
-        ):
+        if matches_same_source(source, item):
             return item
 
     return None
 
 
-def collect_source_evidence(
-    source,
-    chunks,
-):
+def embedding_model_name(match):
     """
-    Cari chunk dan kutipan abstrak
-    berdasarkan sumber yang sama.
+    Identifikasi model berdasarkan metadata hasil
+    scanning, bukan asumsi dari nama field lama.
+    """
 
-    Teks bukti berasal dari JSON asli,
-    tidak dibuat ulang oleh generator.
+    if not isinstance(match, dict):
+        return "Embedding model tidak diketahui"
+
+    model = readable_text(
+        match.get("embedding_model")
+    ).casefold()
+
+    if "bge-m3" in model:
+        return "Cloudflare BGE-M3"
+
+    if "minilm" in model:
+        return "MiniLM"
+
+    if model:
+        return readable_text(
+            match.get("embedding_model")
+        )
+
+    # Jika tidak ada metadata, jangan menamai
+    # skor lama sebagai BGE-M3 secara otomatis.
+    return "Embedding model tidak diketahui"
+
+
+def embedding_score_value(match):
+    if not isinstance(match, dict):
+        return None
+
+    score = match.get("embedding_score")
+
+    if score is None:
+        score = match.get("minilm_score")
+
+    if score is None:
+        return None
+
+    return safe_number(score)
+
+
+def collect_source_evidence(source, chunks):
+    """
+    Ambil bukti asli dari output pipeline.
+
+    Maksimal dua contoh per sumber.
+    Mengutamakan skor CrossEncoder tinggi.
     """
 
     if not isinstance(chunks, (list, tuple)):
@@ -466,11 +371,10 @@ def collect_source_evidence(
     evidence = []
 
     for chunk in chunks:
-
         if not isinstance(chunk, dict):
             continue
 
-        chunk_text = readable_text(
+        document_text = readable_text(
             chunk.get("chunk_text")
         )
 
@@ -479,17 +383,14 @@ def collect_source_evidence(
             "-",
         )
 
-        for match in (
-            chunk.get("matches") or []
-        ):
+        if not document_text:
+            continue
 
+        for match in chunk.get("matches") or []:
             if not isinstance(match, dict):
                 continue
 
-            if not match.get(
-                "matched",
-                False,
-            ):
+            if not match.get("matched", False):
                 continue
 
             if not matches_same_source(
@@ -498,42 +399,89 @@ def collect_source_evidence(
             ):
                 continue
 
-            excerpt = readable_text(
+            source_text = readable_text(
                 match.get("source_excerpt")
             )
 
-            # Jangan tampilkan bukti kosong
-            # seolah-olah tersedia.
-            if not chunk_text or not excerpt:
+            if not source_text:
                 continue
 
             evidence.append({
                 "chunk_index": chunk_index,
-                "document_text": chunk_text,
-                "source_text": excerpt,
-                "cross_score": match.get(
-                    "cross_score"
+                "document_text": document_text,
+                "source_text": source_text,
+                "embedding_model": (
+                    embedding_model_name(match)
+                ),
+                "embedding_score": (
+                    embedding_score_value(match)
+                ),
+                "cross_score": (
+                    match.get("cross_score")
+                ),
+                "text_scope": (
+                    match.get("text_scope")
+                    or match.get("source_text_scope")
                 ),
             })
 
             break
 
-        if len(evidence) >= MAX_EVIDENCE_PER_SOURCE:
-            break
+    evidence.sort(
+        key=lambda item: safe_number(
+            item.get("cross_score"),
+            default=float("-inf"),
+        ),
+        reverse=True,
+    )
 
-    return evidence
+    return evidence[:MAX_EVIDENCE_PER_SOURCE]
 
 
-# ==========================================
-# 4. STYLES
-# ==========================================
+def detect_pipeline_model(chunks):
+    """
+    Nama model yang diketahui dari hasil scanning.
+    """
+
+    if not isinstance(chunks, (list, tuple)):
+        return "Tidak tersedia"
+
+    models = set()
+
+    for chunk in chunks:
+        if not isinstance(chunk, dict):
+            continue
+
+        for match in chunk.get("matches") or []:
+            if not isinstance(match, dict):
+                continue
+
+            if not match.get("matched", False):
+                continue
+
+            models.add(
+                embedding_model_name(match)
+            )
+
+    models.discard(
+        "Embedding model tidak diketahui"
+    )
+
+    if not models:
+        return "Tidak tercatat dalam hasil"
+
+    return ", ".join(sorted(models))
+
+
+# ==================================================
+# 4. STYLE
+# ==================================================
 
 def build_styles():
     base = getSampleStyleSheet()
+    styles = {}
 
-    result = {}
-
-    result["brand"] = ParagraphStyle(
+    styles["brand"] = ParagraphStyle(
         "AKBrand",
         parent=base["Title"],
         fontName=FONT_BOLD,
@@ -544,7 +492,7 @@ def build_styles():
         spaceAfter=4,
     )
 
-    result["subtitle"] = ParagraphStyle(
+    styles["subtitle"] = ParagraphStyle(
         "AKSubtitle",
         parent=base["Normal"],
         fontName=FONT_REGULAR,
@@ -552,10 +500,10 @@ def build_styles():
         leading=15,
         alignment=TA_CENTER,
         textColor=MUTED,
-        spaceAfter=15,
+        spaceAfter=14,
     )
 
-    result["heading"] = ParagraphStyle(
+    styles["heading"] = ParagraphStyle(
         "AKHeading",
         parent=base["Heading2"],
         fontName=FONT_BOLD,
@@ -566,7 +514,7 @@ def build_styles():
         spaceAfter=8,
     )
 
-    result["body"] = ParagraphStyle(
+    styles["body"] = ParagraphStyle(
         "AKBody",
         parent=base["Normal"],
         fontName=FONT_REGULAR,
@@ -577,25 +525,25 @@ def build_styles():
         splitLongWords=True,
     )
 
-    result["small"] = ParagraphStyle(
+    styles["small"] = ParagraphStyle(
         "AKSmall",
-        parent=result["body"],
+        parent=styles["body"],
         fontSize=8,
         leading=12,
         textColor=MUTED,
         spaceAfter=3,
     )
 
-    result["label"] = ParagraphStyle(
+    styles["label"] = ParagraphStyle(
         "AKLabel",
-        parent=result["body"],
+        parent=styles["body"],
         fontName=FONT_BOLD,
         fontSize=8.5,
         textColor=NAVY,
         spaceAfter=0,
     )
 
-    result["score"] = ParagraphStyle(
+    styles["score"] = ParagraphStyle(
         "AKScore",
         parent=base["Title"],
         fontName=FONT_BOLD,
@@ -606,17 +554,17 @@ def build_styles():
         spaceAfter=2,
     )
 
-    result["score_label"] = ParagraphStyle(
+    styles["score_label"] = ParagraphStyle(
         "AKScoreLabel",
-        parent=result["small"],
+        parent=styles["small"],
         alignment=TA_CENTER,
         fontSize=9,
         leading=14,
     )
 
-    result["source_title"] = ParagraphStyle(
+    styles["source_title"] = ParagraphStyle(
         "AKSourceTitle",
-        parent=result["body"],
+        parent=styles["body"],
         fontName=FONT_BOLD,
         fontSize=9.5,
         leading=15,
@@ -624,33 +572,32 @@ def build_styles():
         spaceAfter=7,
     )
 
-    result["evidence"] = ParagraphStyle(
+    styles["evidence"] = ParagraphStyle(
         "AKEvidence",
-        parent=result["body"],
+        parent=styles["body"],
         fontSize=8.5,
         leading=13,
         spaceAfter=0,
     )
 
-    result["note"] = ParagraphStyle(
+    styles["note"] = ParagraphStyle(
         "AKNote",
-        parent=result["body"],
+        parent=styles["body"],
         fontSize=8.3,
         leading=13,
         textColor=MUTED,
     )
 
-    return result
+    return styles
 
 
-# ==========================================
-# 5. HEADER DAN FOOTER
-# ==========================================
+# ==================================================
+# 5. HEADER / FOOTER
+# ==================================================
 
 def draw_page_decoration(canvas, doc):
     canvas.saveState()
 
-    # Garis bagian atas
     canvas.setFillColor(NAVY)
 
     canvas.rect(
@@ -662,31 +609,22 @@ def draw_page_decoration(canvas, doc):
         stroke=0,
     )
 
-    canvas.setFont(
-        FONT_BOLD,
-        8,
-    )
-
     canvas.setFillColor(MUTED)
 
+    canvas.setFont(FONT_BOLD, 8)
     canvas.drawString(
         LEFT_MARGIN,
         PAGE_HEIGHT - 17 * mm,
         "ANTI KOPAS",
     )
 
-    canvas.setFont(
-        FONT_REGULAR,
-        7.5,
-    )
-
+    canvas.setFont(FONT_REGULAR, 7.5)
     canvas.drawRightString(
         PAGE_WIDTH - RIGHT_MARGIN,
         PAGE_HEIGHT - 17 * mm,
-        "SIMILARITY ANALYSIS REPORT",
+        "SEMANTIC SIMILARITY REPORT",
     )
 
-    # Footer
     canvas.setStrokeColor(BORDER)
 
     canvas.line(
@@ -696,12 +634,8 @@ def draw_page_decoration(canvas, doc):
         17 * mm,
     )
 
+    canvas.setFont(FONT_REGULAR, 7)
     canvas.setFillColor(MUTED)
-
-    canvas.setFont(
-        FONT_REGULAR,
-        7,
-    )
 
     canvas.drawString(
         LEFT_MARGIN,
@@ -718,9 +652,9 @@ def draw_page_decoration(canvas, doc):
     canvas.restoreState()
 
 
-# ==========================================
-# 6. KOMPONEN PDF
-# ==========================================
+# ==================================================
+# 6. KOMPONEN
+# ==================================================
 
 def section_heading(text, styles):
     return Paragraph(
@@ -730,17 +664,10 @@ def section_heading(text, styles):
 
 
 def make_progress_bar(percent):
-    """
-    Indikator visual persentase.
-    """
-
     width = CONTENT_WIDTH
     height = 9 * mm
 
-    drawing = Drawing(
-        width,
-        height,
-    )
+    drawing = Drawing(width, height)
 
     drawing.add(
         Rect(
@@ -750,17 +677,14 @@ def make_progress_bar(percent):
             height,
             rx=3,
             ry=3,
-            strokeColor=None,
             fillColor=LIGHT_GRAY,
+            strokeColor=None,
         )
     )
 
-    fill_width = (
-        width * percent / 100
-    )
+    fill_width = width * percent / 100
 
     if fill_width > 0:
-
         drawing.add(
             Rect(
                 0,
@@ -769,8 +693,8 @@ def make_progress_bar(percent):
                 height,
                 rx=3,
                 ry=3,
-                strokeColor=None,
                 fillColor=TEAL,
+                strokeColor=None,
             )
         )
 
@@ -782,62 +706,40 @@ def make_detail_table(
     total_chunks,
     matched_chunks,
     source_count,
+    model_name,
     styles,
 ):
-    rows = [
-        [
-            Paragraph(
-                "Judul Dokumen",
-                styles["label"],
+    data = [
+        ("Judul Dokumen", title),
+        ("Total Segmen", str(total_chunks)),
+        ("Segmen Cocok", str(matched_chunks)),
+        ("Sumber Terdeteksi", str(source_count)),
+        ("Model Embedding", model_name),
+        (
+            "Model Validasi",
+            "Academic CrossEncoder V2",
+        ),
+        (
+            "Waktu Laporan",
+            datetime.now().strftime(
+                "%d-%m-%Y %H:%M"
             ),
-            Paragraph(
-                safe_text(title),
-                styles["body"],
-            ),
-        ],
-        [
-            Paragraph(
-                "Total Segmen",
-                styles["label"],
-            ),
-            Paragraph(
-                f"{total_chunks} segmen dianalisis",
-                styles["body"],
-            ),
-        ],
-        [
-            Paragraph(
-                "Segmen Cocok",
-                styles["label"],
-            ),
-            Paragraph(
-                f"{matched_chunks} segmen",
-                styles["body"],
-            ),
-        ],
-        [
-            Paragraph(
-                "Sumber Terdeteksi",
-                styles["label"],
-            ),
-            Paragraph(
-                f"{source_count} sumber",
-                styles["body"],
-            ),
-        ],
-        [
-            Paragraph(
-                "Waktu Laporan",
-                styles["label"],
-            ),
-            Paragraph(
-                datetime.now().strftime(
-                    "%d-%m-%Y %H:%M"
-                ),
-                styles["body"],
-            ),
-        ],
+        ),
     ]
+
+    rows = []
+
+    for label, value in data:
+        rows.append([
+            Paragraph(
+                safe_text(label),
+                styles["label"],
+            ),
+            Paragraph(
+                safe_text(value),
+                styles["body"],
+            ),
+        ])
 
     table = Table(
         rows,
@@ -899,136 +801,182 @@ def make_detail_table(
     return table
 
 
-def add_evidence(
-    elements,
-    evidence,
-    styles,
-):
+def make_evidence_table(item, styles):
+    doc_excerpt = readable_text(
+        item.get("document_text"),
+        MAX_EVIDENCE_CHARACTERS,
+    )
+
+    source_excerpt = readable_text(
+        item.get("source_text"),
+        MAX_EVIDENCE_CHARACTERS,
+    )
+
+    chunk_index = safe_text(
+        item.get("chunk_index")
+    )
+
+    rows = [
+        [
+            Paragraph(
+                f"<b>Segmen Dokumen {chunk_index}</b>",
+                styles["label"],
+            )
+        ],
+        [
+            Paragraph(
+                safe_text(doc_excerpt),
+                styles["evidence"],
+            )
+        ],
+        [
+            Paragraph(
+                "<b>Cuplikan Teks Sumber</b>",
+                styles["label"],
+            )
+        ],
+        [
+            Paragraph(
+                safe_text(source_excerpt),
+                styles["evidence"],
+            )
+        ],
+    ]
+
+    table = Table(
+        rows,
+        colWidths=[
+            CONTENT_WIDTH - 15 * mm
+        ],
+        hAlign="LEFT",
+    )
+
+    table.setStyle(
+        TableStyle([
+            (
+                "BACKGROUND",
+                (0, 0),
+                (-1, 0),
+                LIGHT_BLUE,
+            ),
+            (
+                "BACKGROUND",
+                (0, 2),
+                (-1, 2),
+                LIGHT_BLUE,
+            ),
+            (
+                "BOX",
+                (0, 0),
+                (-1, -1),
+                0.6,
+                BORDER,
+            ),
+            (
+                "VALIGN",
+                (0, 0),
+                (-1, -1),
+                "TOP",
+            ),
+            (
+                "LEFTPADDING",
+                (0, 0),
+                (-1, -1),
+                9,
+            ),
+            (
+                "RIGHTPADDING",
+                (0, 0),
+                (-1, -1),
+                9,
+            ),
+            (
+                "TOPPADDING",
+                (0, 0),
+                (-1, -1),
+                6,
+            ),
+            (
+                "BOTTOMPADDING",
+                (0, 0),
+                (-1, -1),
+                6,
+            ),
+        ])
+    )
+
+    return table
+
+
+def add_evidence(elements, evidence, styles):
     if not evidence:
         return
 
-    elements.append(
-        Spacer(1, 4 * mm)
-    )
+    elements.append(Spacer(1, 4 * mm))
 
     elements.append(
         Paragraph(
-            "<b>Bukti Kemiripan Teks</b>",
+            "<b>BUKTI KEMIRIPAN TEKS</b>",
             styles["body"],
         )
     )
 
     for item in evidence:
-        document_excerpt = readable_text(
-            item["document_text"],
-            MAX_EVIDENCE_CHARACTERS,
-        )
-
-        source_excerpt = readable_text(
-            item["source_text"],
-            MAX_EVIDENCE_CHARACTERS,
+        elements.append(
+            CondPageBreak(55 * mm)
         )
 
         elements.append(
-            CondPageBreak(50 * mm)
+            make_evidence_table(item, styles)
         )
 
-        rows = [
-            [
-                Paragraph(
-                    "<b>Segmen Dokumen "
-                    f"{safe_text(item['chunk_index'])}"
-                    "</b>",
-                    styles["label"],
-                )
-            ],
-            [
-                Paragraph(
-                    safe_text(document_excerpt),
-                    styles["evidence"],
-                )
-            ],
-            [
-                Paragraph(
-                    "<b>Potongan Abstrak Sumber</b>",
-                    styles["label"],
-                )
-            ],
-            [
-                Paragraph(
-                    safe_text(source_excerpt),
-                    styles["evidence"],
-                )
-            ],
-        ]
-
-        table = Table(
-            rows,
-            colWidths=[CONTENT_WIDTH - 15 * mm],
-            hAlign="LEFT",
+        model_name = item.get(
+            "embedding_model",
+            "Embedding model tidak diketahui",
         )
 
-        table.setStyle(
-            TableStyle([
-                (
-                    "BACKGROUND",
-                    (0, 0),
-                    (-1, 0),
-                    LIGHT_BLUE,
-                ),
-                (
-                    "BACKGROUND",
-                    (0, 2),
-                    (-1, 2),
-                    LIGHT_BLUE,
-                ),
-                (
-                    "BOX",
-                    (0, 0),
-                    (-1, -1),
-                    0.6,
-                    BORDER,
-                ),
-                (
-                    "VALIGN",
-                    (0, 0),
-                    (-1, -1),
-                    "TOP",
-                ),
-                (
-                    "LEFTPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    9,
-                ),
-                (
-                    "RIGHTPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    9,
-                ),
-                (
-                    "TOPPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    6,
-                ),
-                (
-                    "BOTTOMPADDING",
-                    (0, 0),
-                    (-1, -1),
-                    6,
-                ),
-            ])
+        embedding_score = item.get(
+            "embedding_score"
         )
 
-        elements.append(table)
-        elements.append(Spacer(1, 4 * mm))
+        cross_score = item.get(
+            "cross_score"
+        )
+
+        score_parts = []
+
+        if embedding_score is not None:
+            score_parts.append(
+                f"{safe_text(model_name)}: "
+                f"{safe_number(embedding_score):.4f}"
+            )
+
+        if cross_score is not None:
+            score_parts.append(
+                "Academic V2 (raw score): "
+                f"{safe_number(cross_score):.4f}"
+            )
+
+        if score_parts:
+            elements.append(
+                Spacer(1, 2 * mm)
+            )
+
+            elements.append(
+                Paragraph(
+                    " | ".join(score_parts),
+                    styles["small"],
+                )
+            )
+
+        elements.append(
+            Spacer(1, 4 * mm)
+        )
 
 
-# ==========================================
-# 7. GENERATOR UTAMA
-# ==========================================
+# ==================================================
+# 7. GENERATE REPORT
+# ==================================================
 
 def generate_report(
     output_path,
@@ -1041,18 +989,7 @@ def generate_report(
     chunks=None,
 ):
     """
-    Menerima enam parameter lama,
-    ditambah dua parameter opsional.
-
-    source_similarities:
-        Daftar persentase per sumber.
-
-    chunks:
-        Daftar chunk dengan matches
-        dan source_excerpt.
-
-    Keduanya belum wajib dikirim
-    oleh views.py.
+    Fungsi kompatibel dengan views.py lama.
     """
 
     output_path = Path(output_path)
@@ -1071,6 +1008,12 @@ def generate_report(
         else []
     )
 
+    valid_sources = [
+        source
+        for source in matched_sources
+        if isinstance(source, dict)
+    ]
+
     styles = build_styles()
 
     score_percent = percentage_value(
@@ -1087,6 +1030,10 @@ def generate_report(
         int(safe_number(matched_chunks)),
     )
 
+    model_name = detect_pipeline_model(
+        chunks
+    )
+
     doc = SimpleDocTemplate(
         str(output_path),
         pagesize=A4,
@@ -1094,15 +1041,15 @@ def generate_report(
         leftMargin=LEFT_MARGIN,
         topMargin=TOP_MARGIN,
         bottomMargin=BOTTOM_MARGIN,
-        title="AntiKopas Similarity Report",
+        title="AntiKopas Semantic Similarity Report",
         author="AntiKopas",
-        subject="Analisis kemiripan semantik dokumen",
+        subject="Analisis Kemiripan Semantik Dokumen",
     )
 
     elements = []
 
     # --------------------------------------
-    # A. JUDUL LAPORAN
+    # A. JUDUL
     # --------------------------------------
 
     elements.append(
@@ -1118,7 +1065,7 @@ def generate_report(
 
     elements.append(
         Paragraph(
-            "SIMILARITY ANALYSIS REPORT",
+            "SEMANTIC SIMILARITY REPORT",
             styles["subtitle"],
         )
     )
@@ -1138,7 +1085,7 @@ def generate_report(
 
     elements.append(
         Paragraph(
-            format_percentage(score_percent),
+            f"{score_percent:.2f}%",
             styles["score"],
         )
     )
@@ -1164,11 +1111,13 @@ def generate_report(
 
     elements.append(
         Paragraph(
-            "Persentase ini menunjukkan bagian "
-            "dokumen yang ditandai memiliki "
-            "kemiripan semantik dengan sumber "
-            "yang ditemukan sistem. "
-            "Angka ini bukan bukti plagiarisme.",
+            "Similarity Index menunjukkan "
+            "proporsi segmen dokumen yang "
+            "memiliki kecocokan semantik "
+            "dengan sumber akademik yang "
+            "lolos seleksi sistem. "
+            "Angka ini bukan persentase "
+            "plagiarisme atau bukti penyalinan.",
             styles["note"],
         )
     )
@@ -1189,13 +1138,14 @@ def generate_report(
             title=title,
             total_chunks=total_chunks,
             matched_chunks=matched_chunks,
-            source_count=len(matched_sources),
+            source_count=len(valid_sources),
+            model_name=model_name,
             styles=styles,
         )
     )
 
     # --------------------------------------
-    # D. HASIL SUMBER
+    # D. SUMBER AKADEMIK
     # --------------------------------------
 
     elements.append(
@@ -1205,23 +1155,20 @@ def generate_report(
         )
     )
 
-    if not matched_sources:
+    if not valid_sources:
         elements.append(
             Paragraph(
-                "Tidak ditemukan sumber yang "
-                "melewati kriteria kecocokan "
-                "yang diterapkan oleh sistem.",
+                "Tidak ditemukan sumber akademik "
+                "yang melewati seluruh kriteria "
+                "kecocokan sistem.",
                 styles["body"],
             )
         )
 
     for index, source in enumerate(
-        matched_sources,
+        valid_sources,
         start=1,
     ):
-        if not isinstance(source, dict):
-            continue
-
         elements.append(
             CondPageBreak(45 * mm)
         )
@@ -1236,33 +1183,19 @@ def generate_report(
             "Tidak tersedia",
         )
 
-        source_doi = (
-            source.get("doi") or ""
-        )
-
-        cross_score = source.get(
-            "cross_score"
-        )
-
-        stats = find_source_statistics(
-            source,
-            source_similarities,
-        )
-
-        heading = Paragraph(
-            f"<b>{index}. {source_title}</b>",
-            styles["source_title"],
-        )
-
-        metadata = Paragraph(
-            f"<b>Tahun publikasi:</b> {source_year}",
-            styles["body"],
-        )
+        source_doi = source.get("doi") or ""
 
         elements.append(
             KeepTogether([
-                heading,
-                metadata,
+                Paragraph(
+                    f"<b>{index}. {source_title}</b>",
+                    styles["source_title"],
+                ),
+                Paragraph(
+                    "<b>Tahun publikasi:</b> "
+                    f"{source_year}",
+                    styles["body"],
+                ),
             ])
         )
 
@@ -1296,61 +1229,58 @@ def generate_report(
                 )
             )
 
-        # Persentase hanya ditampilkan
-        # jika datanya benar-benar tersedia.
+        stats = find_source_statistics(
+            source,
+            source_similarities,
+        )
+
         if isinstance(stats, dict):
             coverage = stats.get(
                 "similarity_percentage"
             )
 
             if coverage is not None:
-                coverage_value = safe_number(
-                    coverage
-                )
-
                 elements.append(
                     Paragraph(
                         "<b>Cakupan per sumber:</b> "
-                        f"{coverage_value:.2f}%",
+                        f"{safe_number(coverage):.2f}%",
                         styles["body"],
                     )
                 )
 
-            source_matched_chunks = (
-                stats.get("matched_chunks")
+            count = stats.get(
+                "matched_chunks"
             )
 
-            if source_matched_chunks is not None:
+            if count is not None:
                 elements.append(
                     Paragraph(
                         "<b>Segmen cocok:</b> "
-                        f"{safe_text(source_matched_chunks)}",
+                        f"{safe_text(count)}",
                         styles["body"],
                     )
                 )
 
-        if cross_score is not None:
-            raw_score = safe_number(
-                cross_score
+            indices = stats.get(
+                "matched_chunk_indices"
             )
 
-            elements.append(
-                Paragraph(
-                    "<b>Cross Encoder "
-                    "Raw Score:</b> "
-                    f"{raw_score:.3f}",
-                    styles["body"],
+            if isinstance(
+                indices,
+                (list, tuple),
+            ) and indices:
+                elements.append(
+                    Paragraph(
+                        "<b>Indeks segmen:</b> "
+                        + safe_text(
+                            ", ".join(
+                                str(i)
+                                for i in indices
+                            )
+                        ),
+                        styles["small"],
+                    )
                 )
-            )
-
-        elements.append(
-            Paragraph(
-                "<i>Cross Encoder Raw Score "
-                "adalah nilai model, "
-                "bukan persentase kemiripan.</i>",
-                styles["small"],
-            )
-        )
 
         evidence = collect_source_evidence(
             source,
@@ -1377,65 +1307,60 @@ def generate_report(
         )
 
     # --------------------------------------
-    # E. KETERSEDIAAN DATA TAMBAHAN
-    # --------------------------------------
-
-    if (
-        matched_sources
-        and (
-            source_similarities is None
-            or chunks is None
-        )
-    ):
-        elements.append(
-            Spacer(1, 5 * mm)
-        )
-
-        elements.append(
-            Paragraph(
-                "<b>Catatan detail:</b> "
-                "Persentase per sumber dan "
-                "bukti pasangan teks hanya "
-                "ditampilkan jika data "
-                "source_similarities dan chunks "
-                "dikirim ke generator laporan.",
-                styles["note"],
-            )
-        )
-
-    # --------------------------------------
-    # F. CATATAN INTERPRETASI
+    # E. CATATAN METODOLOGI
     # --------------------------------------
 
     elements.append(
         section_heading(
-            "CATATAN INTERPRETASI",
+            "METODOLOGI DAN INTERPRETASI",
             styles,
         )
     )
 
     notes = [
         (
-            "Sistem menggunakan model "
-            "kemiripan semantik untuk "
+            "AntiKopas mencari sumber akademik "
+            "melalui OpenAlex, kemudian "
             "membandingkan segmen dokumen "
-            "dengan abstrak sumber akademik."
+            "dengan teks sumber yang tersedia."
         ),
         (
-            "Kemiripan pembahasan tidak "
-            "secara otomatis menunjukkan "
-            "penyalinan atau pelanggaran "
-            "integritas akademik."
+            "Cloudflare BGE-M3 digunakan "
+            "untuk pencarian kandidat "
+            "kemiripan semantik pada "
+            "konfigurasi pemindaian saat ini."
         ),
         (
-            "Hasil perlu diperiksa bersama "
-            "teks sumber, konteks pembahasan, "
-            "dan tanggal publikasi."
+            "Academic CrossEncoder V2 "
+            "digunakan untuk memvalidasi "
+            "pasangan kandidat."
         ),
         (
-            "Jumlah sumber yang ditampilkan "
-            "bergantung pada hasil pencarian "
-            "dan aturan seleksi sistem."
+            "Skor BGE-M3 merupakan nilai "
+            "cosine similarity. Skor Academic "
+            "V2 merupakan raw score model. "
+            "Keduanya bukan persentase plagiarisme."
+        ),
+        (
+            "Cakupan per sumber dapat saling "
+            "tumpang tindih. Persentase antar "
+            "sumber tidak boleh dijumlahkan "
+            "untuk menghasilkan Similarity Index."
+        ),
+        (
+            "Bukti sumber dapat berasal "
+            "dari abstrak maupun teks lengkap "
+            "yang berhasil diakses sistem. "
+            "Ketersediaan teks setiap sumber "
+            "bisa berbeda."
+        ),
+        (
+            "Kemiripan makna tidak otomatis "
+            "menunjukkan penyalinan atau "
+            "pelanggaran integritas akademik. "
+            "Hasil perlu ditinjau manusia "
+            "dengan mempertimbangkan konteks "
+            "dan sitasi."
         ),
     ]
 
@@ -1446,6 +1371,32 @@ def generate_report(
         elements.append(
             Paragraph(
                 f"{number}. {safe_text(note)}",
+                styles["note"],
+            )
+        )
+
+    # --------------------------------------
+    # F. CATATAN KETERSEDIAAN BUKTI
+    # --------------------------------------
+
+    if (
+        valid_sources
+        and (
+            source_similarities is None
+            or chunks is None
+        )
+    ):
+        elements.append(
+            Spacer(1, 4 * mm)
+        )
+
+        elements.append(
+            Paragraph(
+                "<b>Catatan:</b> Persentase "
+                "per sumber dan bukti pasangan "
+                "teks hanya dapat ditampilkan "
+                "jika data detail diberikan "
+                "kepada generator laporan.",
                 styles["note"],
             )
         )
@@ -1466,13 +1417,18 @@ def generate_report(
     )
 
     print(
-        "[AntiKopas Report] Similarity:",
-        format_percentage(score_percent),
+        "[AntiKopas Report] Semantic Coverage:",
+        f"{score_percent:.2f}%",
     )
 
     print(
         "[AntiKopas Report] Sumber:",
-        len(matched_sources),
+        len(valid_sources),
+    )
+
+    print(
+        "[AntiKopas Report] Embedding:",
+        model_name,
     )
 
     return str(output_path)

@@ -1,23 +1,3 @@
-
-"""
-ANTIKOPAS - ACADEMIC V2
-STEP 3: ANTI-FALSE-POSITIVE VALIDATION
-
-Fitur:
-- Section-aware smart chunking
-- Pembersihan artefak PDF
-- MiniLM untuk pencarian kandidat
-- Pemeriksaan konsistensi topik per pasangan
-- Academic Cross Encoder V2
-- Maksimal 20 sumber terpilih
-- Bukti source_excerpt dan evidence_terms
-
-Output kompatibel dengan:
-- antikopas_service.py
-- similarity_index.py
-- views.py
-"""
-
 import math
 import re
 import unicodedata
@@ -31,10 +11,11 @@ import numpy as np
 import torch
 
 from sentence_transformers import (
-    SentenceTransformer,
     CrossEncoder,
     util,
 )
+
+from .cloudflare_embeddings import CloudflareBGEEmbedding
 
 from .document_analyzer import chunk_text
 from .openalex import search_literature
@@ -45,10 +26,6 @@ from .openalex import search_literature
 # ==================================================
 
 BASE_DIR = Path(__file__).resolve().parents[2]
-
-EMBEDDING_MODEL = (
-    "sentence-transformers/all-MiniLM-L6-v2"
-)
 
 CROSS_ENCODER_MODEL = (
     BASE_DIR
@@ -70,7 +47,7 @@ MIN_EVIDENCE_TOKENS = 40
 CROSS_MAX_LENGTH = 512
 BATCH_SIZE = 16
 
-MIN_MINILM_SCORE = 0.65
+MIN_EMBEDDING_SCORE = 0.65
 CROSS_THRESHOLD = 2.1285
 
 MIN_SOURCE_MATCHED_CHUNKS = 2
@@ -94,11 +71,9 @@ if not CROSS_ENCODER_MODEL.is_dir():
         + str(CROSS_ENCODER_MODEL)
     )
 
-print("[AntiKopas] Loading MiniLM...")
+print("[AntiKopas] Mengaktifkan Cloudflare BGE-M3...")
 
-embedding_model = SentenceTransformer(
-    EMBEDDING_MODEL
-)
+embedding_model = CloudflareBGEEmbedding()
 
 print("[AntiKopas] Loading Academic V2...")
 
@@ -1386,7 +1361,7 @@ def analyze_with_openalex(
     if not literature:
         return empty_results(chunks)
 
-    # D. POTONG ABSTRAK SUMBER
+    # D. POTONG TEKS SUMBER
 
     source_passages = []
     passage_source_indices = []
@@ -1408,11 +1383,11 @@ def analyze_with_openalex(
         return empty_results(chunks)
 
     print(
-        "[Source] Potongan abstrak:",
+        "[Source] Potongan teks sumber:",
         len(source_passages),
     )
 
-    # E. EMBEDDING MINI LM
+    # E. EMBEDDING CLOUDFLARE BGE-M3
 
     chunk_embeddings = embedding_model.encode(
         chunks,
@@ -1466,7 +1441,7 @@ def analyze_with_openalex(
     )
 
     print(
-        "[MiniLM] Kandidat diperiksa:",
+        "[BGE-M3] Kandidat diperiksa:",
         len(selected_sources),
     )
 
@@ -1500,17 +1475,17 @@ def analyze_with_openalex(
             if source_index not in selected_sources:
                 continue
 
-            mini_score = float(
+            embedding_score = float(
                 similarity_matrix[
                     chunk_index,
                     passage_index,
                 ]
             )
 
-            if not math.isfinite(mini_score):
+            if not math.isfinite(embedding_score):
                 continue
 
-            if mini_score < MIN_MINILM_SCORE:
+            if embedding_score < MIN_EMBEDDING_SCORE:
                 continue
 
             existing = strongest_sources.get(
@@ -1519,10 +1494,10 @@ def analyze_with_openalex(
 
             if (
                 existing is None
-                or mini_score > existing[0]
+                or embedding_score > existing[0]
             ):
                 strongest_sources[source_index] = (
-                    mini_score,
+                    embedding_score,
                     passage_index,
                 )
 
@@ -1533,7 +1508,7 @@ def analyze_with_openalex(
         )[:MAX_SOURCE_PAIRS_PER_CHUNK]
 
         for source_index, data in top_sources:
-            mini_score, passage_index = data
+            embedding_score, passage_index = data
 
             source_text = source_passages[
                 passage_index
@@ -1596,7 +1571,7 @@ def analyze_with_openalex(
             locations.append((
                 chunk_index,
                 source_index,
-                mini_score,
+                embedding_score,
                 source_text,
                 validation,
             ))
@@ -1713,7 +1688,7 @@ def analyze_with_openalex(
         (
             chunk_index,
             source_index,
-            mini_score,
+            embedding_score,
             source_text,
             validation,
         ) = location
@@ -1742,7 +1717,13 @@ def analyze_with_openalex(
             "year": source.get("year"),
             "doi": source.get("doi"),
             "url": source.get("url"),
-            "minilm_score": mini_score,
+            "embedding_model": "cloudflare-bge-m3",
+            "embedding_score": embedding_score,
+
+            # Kompatibilitas dengan report lama.
+            # Field ini sekarang berisi skor BGE-M3,
+            # bukan skor MiniLM.
+            "minilm_score": embedding_score,
             "cross_score": cross_score,
             "overlap_score": 0.0,
             "matched": True,
@@ -1769,7 +1750,7 @@ def analyze_with_openalex(
         matches.sort(
             key=lambda match: (
                 match["cross_score"],
-                match["minilm_score"],
+                match["embedding_score"],
             ),
             reverse=True,
         )
