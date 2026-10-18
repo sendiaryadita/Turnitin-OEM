@@ -3,6 +3,9 @@ import { api } from './api/client'
 import logo from './assets/antikopas-logo.png'
 import heroIllustration from './assets/image-transparent.png'
 import heroIllustrationOriginal from './assets/image.png'
+import gambar1 from './assets/gambar1.jpg'
+import gambar2 from './assets/gambar2.jpg'
+import gambar3 from './assets/gambar3.jpg'
 import './App.css'
 
 function App() {
@@ -141,28 +144,43 @@ function App() {
   }
 
   return (
-    <main className="app-shell">
-      <header className="topbar">
-        <div><img className="brand-image dashboard-logo" src={logo} alt="Logo AntiKopas" /><strong>AntiKopas</strong></div>
-        <div className="topbar-actions"><span className="user-avatar">S</span><button className="button-ghost" onClick={logout}><LineIcon type="logout" /> Keluar</button></div>
-      </header>
-      <section className="content">
-        <div className="intro"><p className="eyebrow">DASHBOARD</p><h1>Periksa dokumen akademik</h1><p className="muted">Unggah file untuk mendapatkan analisis kemiripan dan laporan.</p></div>
-        <div className="grid">
-          <form className="panel stack-form" onSubmit={handleUpload}>
-            <h2><LineIcon type="file" /> Analisis baru</h2>
-            <label>Judul dokumen<span className="input-with-icon"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Contoh: Analisis Kuantitatif Mikrobiologi" /><LineIcon type="pencil" /></span></label>
-            <label className="file-input"><span>File dokumen</span><span className="upload-dropzone"><input type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setForm({ ...form, file: e.target.files[0] || null })} /><span className="upload-icon"><LineIcon type="upload" /></span><strong>{form.file ? form.file.name : <>Tarik & lepas file di sini, atau <u>Cari file</u></>}</strong><small>Mendukung format PDF & Word (.docx)</small></span></label>
-            <button disabled={busy}>{busy ? 'Menganalisis...' : <>Mulai analisis <LineIcon type="search" /></>}</button>
+    <main className="dashboard-reference">
+      <nav className="dashboard-reference-nav">
+        <div className="dashboard-reference-actions">
+          <span className="dashboard-reference-avatar">S</span>
+          <button className="dashboard-reference-logout" onClick={logout}><LineIcon type="logout" /> Keluar</button>
+        </div>
+      </nav>
+      <section className="dashboard-reference-main">
+        <div className="dashboard-reference-intro">
+          <span>Dashboard</span>
+          <h1>Periksa dokumen akademik</h1>
+          <p>Unggah file untuk mendapatkan analisis kemiripan dan laporan.</p>
+        </div>
+        <div className="dashboard-reference-grid">
+          <form className="dashboard-reference-card dashboard-reference-upload" onSubmit={handleUpload}>
+            <div className="dashboard-reference-card-heading"><h2>Analisis baru</h2><LineIcon type="file" /></div>
+            <label className="dashboard-reference-label">Judul dokumen
+              <span className="dashboard-reference-title-input"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Contoh: Analisis Kuantitatif Mikrobiologi" /><LineIcon type="pencil" /></span>
+            </label>
+            <label className="dashboard-reference-label dashboard-reference-file-label">File dokumen
+              <span className="dashboard-reference-dropzone">
+                <input type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setForm({ ...form, file: e.target.files[0] || null })} />
+                <span className="dashboard-reference-upload-icon"><LineIcon type="upload" /></span>
+                <strong>{form.file ? form.file.name : <>Tarik & lepas file di sini, atau <u>Cari file</u></>}</strong>
+                <small>Mendukung format PDF & Word (.docx)</small>
+              </span>
+            </label>
+            <button className="dashboard-reference-submit" disabled={busy}>{busy ? 'Menganalisis...' : <>Mulai analisis <LineIcon type="search" /></>}</button>
             {busy && <div className="analysis-loading" role="status" aria-live="polite"><div className="loading-heading"><span className="loading-spinner"></span><strong>Sedang menganalisis dokumen</strong></div><p>Dokumen sedang dibaca dan dibandingkan dengan sumber akademik.</p><div className="loading-track"><i></i></div><small>Mohon tunggu, proses ini dapat membutuhkan waktu.</small></div>}
             {message && <p className="notice">{message}</p>}
           </form>
-          <section className="panel">
-            <div className="panel-heading"><h2><LineIcon type="refresh" /> Riwayat analisis</h2><button className="button-ghost" onClick={loadAnalyses}><LineIcon type="refresh" /> Muat ulang</button></div>
-            {analyses.length === 0 ? <div className="empty-history"><div className="empty-icon"><LineIcon type="search" /></div><h3>Belum ada analisis</h3><p>Dokumen yang Anda periksa akan muncul di sini.</p></div> : <div className="history">{analyses.map((item) => <div className="history-item" key={item.id}><div><strong>{item.title}</strong><span>{item.status} · {item.matched_chunks}/{item.total_chunks} chunk cocok</span></div><b>{item.similarity_index.toFixed(2)}%</b><button className="delete-button" onClick={() => handleDelete(item.id)} aria-label={`Hapus ${item.title}`}>Hapus</button></div>)}</div>}
+          <section className="dashboard-reference-card dashboard-reference-history">
+            <div className="dashboard-reference-card-heading"><h2>Riwayat analisis</h2><button className="dashboard-reference-refresh" onClick={loadAnalyses}><LineIcon type="refresh" /> Muat ulang</button></div>
+            {analyses.length === 0 ? <div className="dashboard-reference-empty"><div className="dashboard-reference-empty-art"><svg width="100" height="100" viewBox="0 0 100 100" fill="none" aria-hidden="true"><rect x="25" y="15" width="45" height="60" rx="4" fill="white" stroke="#1e1b4b" strokeWidth="2.5"/><line x1="35" y1="30" x2="60" y2="30" stroke="#f27a61" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="40" x2="60" y2="40" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="50" x2="60" y2="50" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="60" x2="50" y2="60" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><circle cx="55" cy="55" r="14" fill="#fcfaf8" stroke="#1e1b4b" strokeWidth="3"/><line x1="65" y1="65" x2="78" y2="78" stroke="#f27a61" strokeWidth="6" strokeLinecap="round"/></svg></div><h3>Belum ada analisis.</h3><p>Dokumen yang Anda periksa akan muncul di sini.</p></div> : <div className="history">{analyses.map((item) => <div className="history-item" key={item.id}><div><strong>{item.title}</strong><span>{item.status} · {item.matched_chunks}/{item.total_chunks} chunk cocok</span></div><b>{item.similarity_index.toFixed(2)}%</b><button className="delete-button" onClick={() => handleDelete(item.id)} aria-label={`Hapus ${item.title}`}>Hapus</button></div>)}</div>}
           </section>
         </div>
-        {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks} dari {result.total_chunks} segmen cocok</p>{result.diagnostic_message && <p className="notice diagnostic">{result.diagnostic_message}</p>}</div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
+        {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks} dari {result.total_chunks} segmen cocok</p>{result.diagnostic_message && <p className="notice diagnostic">{result.diagnostic_message}</p>}{result.source_similarities?.length > 0 && <div className="source-summary"><h3>Sumber yang cocok</h3>{result.source_similarities.slice(0, 5).map((source) => <div className="source-summary-item" key={source.openalex_id || source.doi || source.title}><div><strong>{source.title}</strong><span>{source.matched_chunks} segmen · {Number(source.similarity_percentage).toFixed(2)}%</span></div>{source.url && <a href={source.url} target="_blank" rel="noreferrer">Buka sumber</a>}</div>)}</div>}</div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
       </section>
     </main>
   )
@@ -213,10 +231,7 @@ function LandingPage({ onStart }) {
 
       <section className="trust-strip"><span>Dirancang untuk penulis akademik</span><b>Draft</b><b>Research</b><b>Review</b><b>Report</b></section>
 
-      <section className="landing-section process-section" id="cara-kerja">
-        <div className="section-heading"><p className="landing-kicker">ALUR YANG RINGKAS</p><h2>Dari dokumen ke insight<br /><em>dalam tiga langkah.</em></h2></div>
-        <div className="process-grid"><div className="process-item"><span className="step-number">01</span><span className="process-icon"><LineIcon type="upload" /></span><h3>Unggah dokumen</h3><p>Masukkan file PDF atau DOCX dan beri judul agar pemeriksaan mudah dilacak.</p></div><div className="process-item"><span className="step-number">02</span><span className="process-icon"><LineIcon type="search" /></span><h3>Mesin menganalisis</h3><p>Mesin AI membaca segmen dokumen dan membandingkannya dengan sumber akademik.</p></div><div className="process-item"><span className="step-number">03</span><span className="process-icon"><LineIcon type="chart" /></span><h3>Pahami hasilnya</h3><p>Lihat indeks kemiripan, bukti sumber, riwayat, dan unduh laporan PDF.</p></div></div>
-      </section>
+      <AlurRingkas />
 
       <section className="landing-section feature-section" id="fitur">
         <div className="feature-intro"><p className="landing-kicker">DIBUAT UNTUK KERJA YANG SERIUS</p><h2>Lebih dari sekadar<br /><em>angka persentase.</em></h2><div className="feature-visual"><div className="source-tag">Source match <i></i><i></i></div><div className="report-sheet"><b></b><b></b><b></b><i></i><i></i><i></i></div><div className="match-tag">Dokumen <strong>24%</strong></div></div></div>
@@ -227,6 +242,40 @@ function LandingPage({ onStart }) {
       <footer className="landing-footer"><strong>AntiKopas</strong><span>Academic similarity workspace</span><span>© 2026</span></footer>
     </main>
   )
+}
+
+function AlurRingkas() {
+  const steps = [
+    { number: '01', image: gambar1, alt: 'Unggah dokumen', title: 'Unggah dokumen', description: 'Masukkan file PDF atau DOCX dan beri judul agar pemeriksaan mudah dilacak.' },
+    { number: '02', image: gambar2, alt: 'Mesin menganalisis', title: 'Mesin menganalisis', description: 'Mesin AI membaca segmen dokumen dan membandingkannya dengan sumber akademik.' },
+    { number: '03', image: gambar3, alt: 'Pahami hasilnya', title: 'Pahami hasilnya', description: 'Lihat indeks kemiripan, bukti sumber, riwayat, dan unduh laporan PDF.' },
+  ]
+
+  return (
+    <section className="alur-ringkas" id="cara-kerja">
+      <div className="alur-ringkas-inner">
+        <div className="alur-ringkas-header">
+          <span>Alur yang ringkas</span>
+          <h2>Dari dokumen ke<br /><strong>insight dalam tiga langkah.</strong></h2>
+        </div>
+        <div className="alur-ringkas-grid">
+          <FlowArrow className="alur-arrow-one" curve="down" />
+          <FlowArrow className="alur-arrow-two" curve="up" />
+          {steps.map((step) => <article className="alur-card" key={step.number}>
+            <span className="alur-number">{step.number}</span>
+            <div className="alur-image-wrap"><img src={step.image} alt={step.alt} /></div>
+            <h3>{step.title}</h3>
+            <p>{step.description}</p>
+          </article>)}
+        </div>
+      </div>
+    </section>
+  )
+}
+
+function FlowArrow({ className, curve }) {
+  const path = curve === 'down' ? 'M0 10 Q50 20 100 10' : 'M0 10 Q50 0 100 10'
+  return <div className={`alur-arrow ${className}`} aria-hidden="true"><svg viewBox="0 0 100 20" fill="none" stroke="#64748b" strokeWidth="1.5" strokeDasharray="4 4"><path d={path} /><polyline points="95,5 100,10 95,15" strokeDasharray="none" /></svg></div>
 }
 
 export default App

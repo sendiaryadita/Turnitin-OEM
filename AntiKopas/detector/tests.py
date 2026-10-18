@@ -121,9 +121,24 @@ class BackendApiTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("25 MB", response.json()["message"])
 
+    def test_detect_rejects_file_with_invalid_pdf_content(self):
+        self.authenticate()
+        upload = SimpleUploadedFile(
+            "palsu.pdf",
+            b"Ini bukan isi PDF",
+            content_type="application/pdf",
+        )
+        response = self.client.post(
+            "/api/detect/",
+            {"title": "Dokumen uji", "file": upload},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("format PDF", response.json()["message"])
+
     def test_analysis_list_and_detail(self):
         self.authenticate()
         document = Document.objects.create(
+            uploaded_by=self.user,
             title="Dokumen pengujian",
             original_file=ContentFile(b"uji", name="uji.txt"),
             file_type="text/plain",
@@ -145,6 +160,7 @@ class BackendApiTests(TestCase):
     def test_analysis_can_be_deleted(self):
         self.authenticate()
         document = Document.objects.create(
+            uploaded_by=self.user,
             title="Dokumen hapus",
             original_file=ContentFile(b"hapus", name="hapus.txt"),
             file_type="text/plain",

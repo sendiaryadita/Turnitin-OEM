@@ -1,6 +1,8 @@
 
 import os
 import hashlib
+import io
+import zipfile
 from datetime import datetime
 from pathlib import Path
 
@@ -85,7 +87,9 @@ def register_user(request):
 def analysis_list(request):
     """Mengembalikan riwayat analisis terbaru."""
     limit = min(max(int(request.query_params.get("limit", 20)), 1), 100)
-    jobs = AnalysisJob.objects.select_related("document").all()[:limit]
+    jobs = AnalysisJob.objects.select_related("document").filter(
+        document__uploaded_by=request.user
+    )[:limit]
     return Response({
         "status": "success",
         "results": [
@@ -109,7 +113,10 @@ def analysis_list(request):
 def analysis_detail(request, analysis_id):
     """Mengembalikan detail analisis beserta chunk dan sumber."""
     try:
-        job = AnalysisJob.objects.select_related("document").get(pk=analysis_id)
+        job = AnalysisJob.objects.select_related("document").get(
+            pk=analysis_id,
+            document__uploaded_by=request.user,
+        )
     except AnalysisJob.DoesNotExist:
         return Response({
             "status": "error",
@@ -233,6 +240,22 @@ def detect_similarity(request):
     # Simpan dokumen dan buat jejak proses sebelum model AI dijalankan.
     file_bytes = uploaded_file.read()
     uploaded_file.seek(0)
+
+    if file_extension == ".pdf" and not file_bytes.startswith(b"%PDF-"):
+        return Response({
+            "status": "error",
+            "message": "Isi file tidak sesuai dengan format PDF.",
+        }, status=400)
+
+    if file_extension == ".docx":
+        uploaded_file.seek(0)
+        is_valid_docx = zipfile.is_zipfile(io.BytesIO(file_bytes))
+        uploaded_file.seek(0)
+        if not is_valid_docx:
+            return Response({
+                "status": "error",
+                "message": "Isi file tidak sesuai dengan format DOCX.",
+            }, status=400)
     document = Document.objects.create(
         uploaded_by=request.user,
         title=title,
@@ -650,6 +673,16 @@ def download_report(
         report_directory,
         safe_filename
     )
+
+    report_record = Report.objects.filter(
+        file__endswith=safe_filename,
+        analysis__document__uploaded_by=request.user,
+    ).first()
+    if report_record is None:
+        return Response({
+            "status": "error",
+            "message": "Report tidak ditemukan",
+        }, status=404)
 
     if not os.path.isfile(
         report_path
