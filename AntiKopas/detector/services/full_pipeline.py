@@ -30,7 +30,7 @@ BASE_DIR = Path(__file__).resolve().parents[2]
 CROSS_ENCODER_MODEL = (
     BASE_DIR
     / "models"
-    / "antikopas-cross-encoder-academic-v2"
+    / "antikopas-cross-encoder"
 )
 
 OPENALEX_PER_PAGE = 25

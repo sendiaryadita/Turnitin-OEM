@@ -1,27 +1,178 @@
 
 import os
+import hashlib
 from datetime import datetime
 
+from django.contrib.auth.models import User
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError
 from django.http import FileResponse
 from django.conf import settings
+from django.core.files import File
 
-from rest_framework.decorators import api_view
+from rest_framework.decorators import api_view, permission_classes
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.response import Response
 
-from .services.antikopas_service import analyze_antikopas
-from .services.document_parser import extract_text
-from .services.report_generator import generate_report
-
+from .models import (
+    AnalysisJob,
+    Document,
+    DocumentChunk,
+    Report,
+    SimilarityResult,
+    SourceJournal,
+)
 
 # ==========================================
 # 1. HEALTH CHECK
 # ==========================================
 
 @api_view(["GET"])
+@permission_classes([AllowAny])
 def health_check(request):
     return Response({
         "status": "ok",
         "message": "AntiKopas backend is running"
+    })
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+def register_user(request):
+    """Membuat akun pengguna baru tanpa mengembalikan password."""
+    username = str(request.data.get("username", "")).strip()
+    password = str(request.data.get("password", ""))
+    password_confirm = str(request.data.get("password_confirm", ""))
+
+    if not username or not password or not password_confirm:
+        return Response({
+            "status": "error",
+            "message": "username, password, dan password_confirm wajib diisi",
+        }, status=400)
+    if password != password_confirm:
+        return Response({
+            "status": "error",
+            "message": "Konfirmasi password tidak cocok",
+        }, status=400)
+    if User.objects.filter(username=username).exists():
+        return Response({
+            "status": "error",
+            "message": "Username sudah digunakan",
+        }, status=409)
+
+    try:
+        validate_password(password)
+    except ValidationError as error:
+        return Response({
+            "status": "error",
+            "message": list(error.messages),
+        }, status=400)
+
+    user = User.objects.create_user(username=username, password=password)
+    return Response({
+        "status": "success",
+        "message": "Akun berhasil dibuat",
+        "username": user.username,
+    }, status=201)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def analysis_list(request):
+    """Mengembalikan riwayat analisis terbaru."""
+    limit = min(max(int(request.query_params.get("limit", 20)), 1), 100)
+    jobs = AnalysisJob.objects.select_related("document").all()[:limit]
+    return Response({
+        "status": "success",
+        "results": [
+            {
+                "id": job.id,
+                "title": job.document.title,
+                "status": job.status,
+                "similarity_index": float(job.similarity_index),
+                "total_chunks": job.total_chunks,
+                "matched_chunks": job.matched_chunks,
+                "created_at": job.created_at,
+                "completed_at": job.completed_at,
+            }
+            for job in jobs
+        ],
+    })
+
+
+@api_view(["GET", "DELETE"])
+@permission_classes([IsAuthenticated])
+def analysis_detail(request, analysis_id):
+    """Mengembalikan detail analisis beserta chunk dan sumber."""
+    try:
+        job = AnalysisJob.objects.select_related("document").get(pk=analysis_id)
+    except AnalysisJob.DoesNotExist:
+        return Response({
+            "status": "error",
+            "message": "Analisis tidak ditemukan",
+        }, status=404)
+
+    if request.method == "DELETE":
+        document = job.document
+        report = getattr(job, "report", None)
+        if report and report.file:
+            report.file.delete(save=False)
+        if document.original_file:
+            document.original_file.delete(save=False)
+        job.delete()
+        document.delete()
+        return Response({
+            "status": "success",
+            "message": "Riwayat analisis berhasil dihapus",
+        })
+
+    chunks = []
+    for chunk in job.chunks.all():
+        results = chunk.similarity_results.select_related("source").all()
+        chunks.append({
+            "index": chunk.chunk_index,
+            "text": chunk.text,
+            "token_count": chunk.token_count,
+            "matches": [
+                {
+                    "matched": result.matched,
+                    "embedding_score": result.embedding_score,
+                    "cross_encoder_score": result.cross_encoder_score,
+                    "validation_reason": result.validation_reason,
+                    "source_excerpt": result.source_excerpt,
+                    "source": {
+                        "title": result.source.title,
+                        "year": result.source.year,
+                        "doi": result.source.doi,
+                        "url": result.source.url,
+                    },
+                }
+                for result in results
+            ],
+        })
+
+    report_url = None
+    if hasattr(job, "report") and job.report.file:
+        report_url = request.build_absolute_uri(job.report.file.url)
+
+    return Response({
+        "status": "success",
+        "id": job.id,
+        "document": {
+            "id": job.document_id,
+            "title": job.document.title,
+            "filename": os.path.basename(job.document.original_file.name),
+        },
+        "analysis": {
+            "status": job.status,
+            "similarity_index": float(job.similarity_index),
+            "total_chunks": job.total_chunks,
+            "matched_chunks": job.matched_chunks,
+            "created_at": job.created_at,
+            "completed_at": job.completed_at,
+        },
+        "chunks": chunks,
+        "report_url": report_url,
     })
 
 
@@ -30,6 +181,7 @@ def health_check(request):
 # ==========================================
 
 @api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def detect_similarity(request):
 
     # --------------------------------------
@@ -61,6 +213,30 @@ def detect_similarity(request):
             "message": "file wajib dikirim"
         }, status=400)
 
+    # Simpan dokumen dan buat jejak proses sebelum model AI dijalankan.
+    file_bytes = uploaded_file.read()
+    uploaded_file.seek(0)
+    document = Document.objects.create(
+        uploaded_by=request.user,
+        title=title,
+        original_file=uploaded_file,
+        file_type=(uploaded_file.content_type or "")[:20],
+        file_size=uploaded_file.size,
+        sha256=hashlib.sha256(file_bytes).hexdigest(),
+    )
+    analysis_job = AnalysisJob.objects.create(
+        document=document,
+        status=AnalysisJob.Status.PROCESSING,
+        started_at=datetime.now(),
+    )
+
+    # Import service berat hanya setelah input dasar valid.
+    # Health check, startup, dan validasi request tidak perlu memuat
+    # Torch/model AI terlebih dahulu.
+    from .services.antikopas_service import analyze_antikopas
+    from .services.document_parser import extract_text
+    from .services.report_generator import generate_report
+
     # --------------------------------------
     # D. EKSTRAKSI DOKUMEN
     # --------------------------------------
@@ -69,12 +245,20 @@ def detect_similarity(request):
         text = extract_text(uploaded_file)
 
     except ValueError as e:
+        analysis_job.status = AnalysisJob.Status.FAILED
+        analysis_job.error_message = str(e)
+        analysis_job.completed_at = datetime.now()
+        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
         return Response({
             "status": "error",
             "message": str(e)
         }, status=400)
 
     except Exception as e:
+        analysis_job.status = AnalysisJob.Status.FAILED
+        analysis_job.error_message = str(e)
+        analysis_job.completed_at = datetime.now()
+        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
         return Response({
             "status": "error",
             "message": (
@@ -83,6 +267,10 @@ def detect_similarity(request):
         }, status=400)
 
     if not text or not str(text).strip():
+        analysis_job.status = AnalysisJob.Status.FAILED
+        analysis_job.error_message = "Isi dokumen tidak dapat dibaca"
+        analysis_job.completed_at = datetime.now()
+        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
         return Response({
             "status": "error",
             "message": "Isi dokumen tidak dapat dibaca"
@@ -99,6 +287,10 @@ def detect_similarity(request):
         )
 
     except Exception as e:
+        analysis_job.status = AnalysisJob.Status.FAILED
+        analysis_job.error_message = str(e)
+        analysis_job.completed_at = datetime.now()
+        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
         return Response({
             "status": "error",
             "message": (
@@ -136,6 +328,58 @@ def detect_similarity(request):
         "source_similarities",
         []
     )
+
+    # Simpan hasil analisis ke database.
+    analysis_job.total_chunks = total_chunks
+    analysis_job.matched_chunks = matched_chunks
+    analysis_job.similarity_index = float(similarity_index or 0)
+    analysis_job.status = AnalysisJob.Status.COMPLETED
+    analysis_job.completed_at = datetime.now()
+    analysis_job.save(update_fields=[
+        "total_chunks", "matched_chunks", "similarity_index",
+        "status", "completed_at"
+    ])
+
+    source_cache = {}
+    for index, chunk_data in enumerate(document_results):
+        chunk_text = str(chunk_data.get("text", ""))
+        document_chunk = DocumentChunk.objects.create(
+            analysis=analysis_job,
+            chunk_index=chunk_data.get("chunk_index", index),
+            text=chunk_text,
+            token_count=len(chunk_text.split()),
+        )
+        for match in chunk_data.get("matches", []):
+            source_key = (
+                match.get("doi") or match.get("url") or match.get("title")
+            )
+            if not source_key:
+                continue
+            source_key = str(source_key).strip()
+            source = source_cache.get(source_key)
+            if source is None:
+                source, _ = SourceJournal.objects.get_or_create(
+                    openalex_id=str(match.get("openalex_id", ""))[:255],
+                    title=str(match.get("title", "Untitled"))[:1000],
+                    defaults={
+                        "year": match.get("year"),
+                        "doi": str(match.get("doi", ""))[:500],
+                        "url": str(match.get("url", ""))[:2000],
+                    },
+                )
+                source_cache[source_key] = source
+            SimilarityResult.objects.update_or_create(
+                analysis=analysis_job,
+                chunk=document_chunk,
+                source=source,
+                defaults={
+                    "embedding_score": match.get("minilm_score"),
+                    "cross_encoder_score": match.get("cross_score"),
+                    "matched": bool(match.get("matched")),
+                    "validation_reason": str(match.get("validation_reason", ""))[:255],
+                    "source_excerpt": str(match.get("source_excerpt", "")),
+                },
+            )
 
     # --------------------------------------
     # G. KUMPULKAN JURNAL YANG COCOK
@@ -283,6 +527,10 @@ def detect_similarity(request):
         )
 
     except Exception as e:
+        analysis_job.status = AnalysisJob.Status.FAILED
+        analysis_job.error_message = str(e)
+        analysis_job.completed_at = datetime.now()
+        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
         return Response({
             "status": "error",
             "message": (
@@ -290,6 +538,12 @@ def detect_similarity(request):
                 f"{str(e)}"
             )
         }, status=500)
+
+    with open(report_path, "rb") as report_file:
+        Report.objects.update_or_create(
+            analysis=analysis_job,
+            defaults={"file": File(report_file, name=report_filename)},
+        )
 
     # --------------------------------------
     # K. REPORT URL
@@ -306,6 +560,10 @@ def detect_similarity(request):
     return Response({
 
         "status": "success",
+
+        "analysis_id": analysis_job.id,
+
+        "document_id": document.id,
 
         "title": title,
 
@@ -337,6 +595,7 @@ def detect_similarity(request):
 # ==========================================
 
 @api_view(["GET"])
+@permission_classes([IsAuthenticated])
 def download_report(
     request,
     filename

@@ -1,7 +1,5 @@
 import re
 
-from .hybrid_similarity import calculate_hybrid_similarity
-
 
 def chunk_text(text, max_sentences=10):
     """
@@ -56,6 +54,8 @@ def analyze_document(document_text, source_texts):
         }
     ]
     """
+
+    from .hybrid_similarity import calculate_hybrid_similarity
 
     chunks = chunk_text(document_text)
 

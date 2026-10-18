@@ -12,6 +12,7 @@ __pycache__/
 # Virtual environment
 venv/
 .venv/
+.venv312/
 env/
 
 # Secrets dan konfigurasi lokal
@@ -26,6 +27,7 @@ db.sqlite3-journal
 
 # Generated PDF reports
 reports/
+media/
 
 # Dokumen testing lokal
 testing_documents/
