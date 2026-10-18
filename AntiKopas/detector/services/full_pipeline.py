@@ -1227,15 +1227,22 @@ def collect_sources(
             "Cek koneksi atau API."
         )
 
-    return sources
+    return sources, dict(stats)
 
 
 # ==================================================
 # 11. HASIL KOSONG
 # ==================================================
 
-def empty_results(chunks):
-    return [
+class PipelineResults(list):
+    """List hasil yang membawa informasi diagnostik tanpa mengubah format lama."""
+
+    diagnostic_code = ""
+    diagnostic_message = ""
+
+
+def empty_results(chunks, diagnostic_code="", diagnostic_message=""):
+    results = PipelineResults([
         {
             "chunk_index": index,
             "chunk_text": chunk,
@@ -1245,7 +1252,10 @@ def empty_results(chunks):
             chunks,
             start=1,
         )
-    ]
+    ])
+    results.diagnostic_code = diagnostic_code
+    results.diagnostic_message = diagnostic_message
+    return results
 
 
 # ==================================================
@@ -1352,14 +1362,24 @@ def analyze_with_openalex(
 
     # C. OPENALEX
 
-    literature = collect_sources(
+    literature, source_stats = collect_sources(
         document_title,
         original_chunks,
         extract_document_doi(clean_text),
     )
 
     if not literature:
-        return empty_results(chunks)
+        if source_stats.get("self_match", 0):
+            return empty_results(
+                chunks,
+                "self_match_excluded",
+                "Sumber yang sama dengan dokumen upload sengaja dikecualikan dari perhitungan.",
+            )
+        return empty_results(
+            chunks,
+            "no_sources",
+            "Tidak ada sumber akademik yang lolos seleksi untuk dibandingkan.",
+        )
 
     # D. POTONG TEKS SUMBER
 
@@ -1966,4 +1986,10 @@ def analyze_with_openalex(
     print("====================================")
     print()
 
-    return document_results
+    pipeline_results = PipelineResults(document_results)
+    if matched_chunks == 0:
+        pipeline_results.diagnostic_code = "no_match_found"
+        pipeline_results.diagnostic_message = (
+            "Tidak ditemukan segmen yang memenuhi ambang kemiripan."
+        )
+    return pipeline_results

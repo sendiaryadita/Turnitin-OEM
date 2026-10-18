@@ -2,6 +2,7 @@
 import os
 import hashlib
 from datetime import datetime
+from pathlib import Path
 
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
@@ -22,6 +23,9 @@ from .models import (
     SimilarityResult,
     SourceJournal,
 )
+
+ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".docx"}
+MAX_DOCUMENT_SIZE = 25 * 1024 * 1024
 
 # ==========================================
 # 1. HEALTH CHECK
@@ -211,6 +215,19 @@ def detect_similarity(request):
         return Response({
             "status": "error",
             "message": "file wajib dikirim"
+        }, status=400)
+
+    file_extension = Path(uploaded_file.name or "").suffix.lower()
+    if file_extension not in ALLOWED_DOCUMENT_EXTENSIONS:
+        return Response({
+            "status": "error",
+            "message": "Format file tidak didukung. Gunakan PDF atau DOCX.",
+        }, status=400)
+
+    if uploaded_file.size > MAX_DOCUMENT_SIZE:
+        return Response({
+            "status": "error",
+            "message": "Ukuran file terlalu besar. Maksimal ukuran file adalah 25 MB.",
         }, status=400)
 
     # Simpan dokumen dan buat jejak proses sebelum model AI dijalankan.
@@ -580,6 +597,10 @@ def detect_similarity(request):
         "matched_sources": matched_sources,
 
         "source_similarities": source_similarities,
+
+        "diagnostic_code": analysis.get("diagnostic_code", ""),
+
+        "diagnostic_message": analysis.get("diagnostic_message", ""),
 
         "chunks": document_results,
 

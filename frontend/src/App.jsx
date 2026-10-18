@@ -52,6 +52,16 @@ function App() {
       setMessage('Judul dan file wajib diisi.')
       return
     }
+    const allowedExtensions = ['.pdf', '.docx']
+    const fileName = form.file.name.toLowerCase()
+    if (!allowedExtensions.some((extension) => fileName.endsWith(extension))) {
+      setMessage('Format file tidak didukung. Gunakan PDF atau DOCX.')
+      return
+    }
+    if (form.file.size > 25 * 1024 * 1024) {
+      setMessage('Ukuran file terlalu besar. Maksimal ukuran file adalah 25 MB.')
+      return
+    }
     setBusy(true)
     setMessage('Dokumen sedang dianalisis. Proses ini dapat membutuhkan waktu.')
     try {
@@ -152,7 +162,7 @@ function App() {
             {analyses.length === 0 ? <div className="empty-history"><div className="empty-icon"><LineIcon type="search" /></div><h3>Belum ada analisis</h3><p>Dokumen yang Anda periksa akan muncul di sini.</p></div> : <div className="history">{analyses.map((item) => <div className="history-item" key={item.id}><div><strong>{item.title}</strong><span>{item.status} · {item.matched_chunks}/{item.total_chunks} chunk cocok</span></div><b>{item.similarity_index.toFixed(2)}%</b><button className="delete-button" onClick={() => handleDelete(item.id)} aria-label={`Hapus ${item.title}`}>Hapus</button></div>)}</div>}
           </section>
         </div>
-        {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks} dari {result.total_chunks} segmen cocok</p></div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
+        {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks} dari {result.total_chunks} segmen cocok</p>{result.diagnostic_message && <p className="notice diagnostic">{result.diagnostic_message}</p>}</div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
       </section>
     </main>
   )

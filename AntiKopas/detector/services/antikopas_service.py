@@ -27,4 +27,6 @@ def analyze_antikopas(document_text, document_title=None):
         # Format baru AntiKopas
         "total_similarity": index_result["total_similarity"],
         "source_similarities": index_result["source_similarities"],
+        "diagnostic_code": getattr(document_results, "diagnostic_code", ""),
+        "diagnostic_message": getattr(document_results, "diagnostic_message", ""),
     }

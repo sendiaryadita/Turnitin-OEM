@@ -2,6 +2,7 @@ from io import BytesIO
 
 from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase
 
 from .models import AnalysisJob, Document
@@ -91,6 +92,34 @@ class BackendApiTests(TestCase):
         response = self.client.post("/api/detect/", {})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["message"], "title wajib dikirim")
+
+    def test_detect_rejects_unsupported_file_extension(self):
+        self.authenticate()
+        upload = SimpleUploadedFile(
+            "uji.txt",
+            b"Isi dokumen pengujian",
+            content_type="text/plain",
+        )
+        response = self.client.post(
+            "/api/detect/",
+            {"title": "Dokumen uji", "file": upload},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Format file tidak didukung", response.json()["message"])
+
+    def test_detect_rejects_file_larger_than_limit(self):
+        self.authenticate()
+        upload = SimpleUploadedFile(
+            "uji.pdf",
+            b"0" * (25 * 1024 * 1024 + 1),
+            content_type="application/pdf",
+        )
+        response = self.client.post(
+            "/api/detect/",
+            {"title": "Dokumen uji", "file": upload},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("25 MB", response.json()["message"])
 
     def test_analysis_list_and_detail(self):
         self.authenticate()
