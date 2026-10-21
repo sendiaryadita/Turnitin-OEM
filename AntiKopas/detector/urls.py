@@ -4,6 +4,7 @@ from .views import (
     health_check,
     register_user,
     analysis_list,
+    analysis_stats,
     analysis_detail,
     detect_similarity,
     download_report
@@ -14,6 +15,7 @@ urlpatterns = [
     path("health/", health_check),
     path("auth/register/", register_user),
     path("analyses/", analysis_list),
+    path("analyses/stats/", analysis_stats),
     path("analyses/<int:analysis_id>/", analysis_detail),
     path("detect/", detect_similarity),
     path(

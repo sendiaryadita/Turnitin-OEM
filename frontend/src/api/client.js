@@ -50,7 +50,15 @@ function authHeaders() {
 
 export const api = {
   login: (username, password) => request('/auth/token/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }),
-  listAnalyses: () => request('/analyses/', { headers: authHeaders() }),
+  register: (username, password, passwordConfirm) => request('/auth/register/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, password_confirm: passwordConfirm }) }),
+  listAnalyses: ({ page = 1, pageSize = 10, query = '', status = '' } = {}) => {
+    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+    if (query) params.set('q', query)
+    if (status) params.set('status', status)
+    return request(`/analyses/?${params.toString()}`, { headers: authHeaders() })
+  },
+  getStats: () => request('/analyses/stats/', { headers: authHeaders() }),
+  updateAnalysis: (id, title) => request(`/analyses/${id}/`, { method: 'PATCH', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) }),
   deleteAnalysis: (id) => request(`/analyses/${id}/`, { method: 'DELETE', headers: authHeaders() }),
   getReport: (url) => downloadReport(url),
   detect: (title, file) => {

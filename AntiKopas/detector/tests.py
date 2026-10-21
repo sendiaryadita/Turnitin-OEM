@@ -170,3 +170,31 @@ class BackendApiTests(TestCase):
         response = self.client.delete(f"/api/analyses/{job.id}/")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(AnalysisJob.objects.filter(pk=job.id).exists())
+
+    def test_analysis_can_be_renamed_and_stats_are_available(self):
+        self.authenticate()
+        document = Document.objects.create(
+            uploaded_by=self.user,
+            title="Judul lama",
+            original_file=ContentFile(b"uji", name="uji.txt"),
+            file_type="text/plain",
+            file_size=3,
+        )
+        job = AnalysisJob.objects.create(
+            document=document,
+            status=AnalysisJob.Status.COMPLETED,
+            total_chunks=4,
+            matched_chunks=1,
+            similarity_index=25,
+        )
+        renamed = self.client.patch(
+            f"/api/analyses/{job.id}/",
+            {"title": "Judul baru"},
+            content_type="application/json",
+        )
+        stats = self.client.get("/api/analyses/stats/")
+        listing = self.client.get("/api/analyses/?q=Judul%20baru&page_size=1")
+        self.assertEqual(renamed.status_code, 200)
+        self.assertEqual(stats.status_code, 200)
+        self.assertEqual(stats.json()["total_analyses"], 1)
+        self.assertEqual(listing.json()["results"][0]["title"], "Judul baru")

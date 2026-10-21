@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { api } from './api/client'
 import logo from './assets/antikopas-logo.png'
 import heroIllustration from './assets/image-transparent.png'
@@ -11,27 +11,53 @@ import './App.css'
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('antikopas_access'))
   const [showLogin, setShowLogin] = useState(false)
+  const [showRegister, setShowRegister] = useState(false)
   const [login, setLogin] = useState({ username: '', password: '' })
+  const [registration, setRegistration] = useState({ username: '', password: '', passwordConfirm: '' })
   const [form, setForm] = useState({ title: '', file: null })
   const [analyses, setAnalyses] = useState([])
+  const [historyMeta, setHistoryMeta] = useState({ page: 1, totalPages: 1, count: 0 })
+  const [historyQuery, setHistoryQuery] = useState('')
+  const [historyStatus, setHistoryStatus] = useState('')
+  const [stats, setStats] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
-  useEffect(() => {
-    if (token) {
-      loadAnalyses()
-    }
-  }, [token])
-
-  async function loadAnalyses() {
+  const loadAnalyses = useCallback(async () => {
     try {
-      const data = await api.listAnalyses()
+      const data = await api.listAnalyses({ page: historyMeta.page, query: historyQuery, status: historyStatus })
       setAnalyses(data.results || [])
+      setHistoryMeta({ page: data.page || 1, totalPages: data.total_pages || 1, count: data.count || 0 })
     } catch (error) {
       setMessage(error.message)
     }
-  }
+  }, [historyMeta.page, historyQuery, historyStatus])
+
+  const loadStats = useCallback(async () => {
+    try {
+      setStats(await api.getStats())
+    } catch (error) {
+      setMessage(error.message)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!token) return
+    const initialLoad = window.setTimeout(() => {
+      loadAnalyses()
+      loadStats()
+    }, 0)
+    return () => window.clearTimeout(initialLoad)
+  }, [token, loadAnalyses, loadStats])
+
+  useEffect(() => {
+    if (!token) return undefined
+    const timer = window.setInterval(() => {
+      if (analyses.some((item) => item.status === 'pending' || item.status === 'processing')) loadAnalyses()
+    }, 3000)
+    return () => window.clearInterval(timer)
+  }, [token, analyses, loadAnalyses])
 
   async function handleLogin(event) {
     event.preventDefault()
@@ -42,6 +68,23 @@ function App() {
       localStorage.setItem('antikopas_access', data.access)
       localStorage.setItem('antikopas_refresh', data.refresh)
       setToken(data.access)
+    } catch (error) {
+      setMessage(error.message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleRegister(event) {
+    event.preventDefault()
+    setBusy(true)
+    setMessage('')
+    try {
+      await api.register(registration.username, registration.password, registration.passwordConfirm)
+      setLogin({ username: registration.username, password: '' })
+      setRegistration({ username: '', password: '', passwordConfirm: '' })
+      setShowRegister(false)
+      setMessage('Akun berhasil dibuat. Silakan masuk.')
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -88,6 +131,19 @@ function App() {
       if (result?.analysis_id === id) setResult(null)
       setMessage('Riwayat berhasil dihapus.')
       await loadAnalyses()
+      await loadStats()
+    } catch (error) {
+      setMessage(error.message)
+    }
+  }
+
+  async function handleRename(item) {
+    const title = window.prompt('Masukkan judul baru:', item.title)
+    if (title === null || !title.trim() || title.trim() === item.title) return
+    try {
+      await api.updateAnalysis(item.id, title.trim())
+      setMessage('Judul analisis berhasil diperbarui.')
+      await loadAnalyses()
     } catch (error) {
       setMessage(error.message)
     }
@@ -129,13 +185,20 @@ function App() {
           <button className="back-link" onClick={() => setShowLogin(false)}>← Kembali ke beranda</button>
           <div className="auth-brand"><img className="brand-image auth-logo" src={logo} alt="Logo AntiKopas" /><span>Anti<span>Kopas</span></span></div>
           <p className="eyebrow">RUANG KERJA AKADEMIK DIGITAL</p>
-          <h1>Masuk untuk <em>memeriksa.</em></h1>
-          <p className="muted">Masuk untuk memeriksa dokumen dan melihat riwayat laporan.</p>
-          <form onSubmit={handleLogin} className="stack-form">
-            <label>Username<input value={login.username} onChange={(e) => setLogin({ ...login, username: e.target.value })} /></label>
-            <label>Password<input type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label>
+          <h1>{showRegister ? <>Buat akun <em>baru.</em></> : <>Masuk untuk <em>memeriksa.</em></>}</h1>
+          <p className="muted">{showRegister ? 'Daftar untuk menyimpan analisis dan laporan Anda.' : 'Masuk untuk memeriksa dokumen dan melihat riwayat laporan.'}</p>
+          {showRegister ? <form onSubmit={handleRegister} className="stack-form">
+            <label>Username<input required value={registration.username} onChange={(e) => setRegistration({ ...registration, username: e.target.value })} /></label>
+            <label>Password<input required type="password" value={registration.password} onChange={(e) => setRegistration({ ...registration, password: e.target.value })} /></label>
+            <label>Konfirmasi password<input required type="password" value={registration.passwordConfirm} onChange={(e) => setRegistration({ ...registration, passwordConfirm: e.target.value })} /></label>
+            <button className="auth-submit" disabled={busy}>{busy ? 'Memproses...' : 'Daftar akun'}</button>
+            <button type="button" className="auth-switch" onClick={() => { setShowRegister(false); setMessage('') }}>Sudah punya akun? Masuk</button>
+          </form> : <form onSubmit={handleLogin} className="stack-form">
+            <label>Username<input required value={login.username} onChange={(e) => setLogin({ ...login, username: e.target.value })} /></label>
+            <label>Password<input required type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label>
             <button className="auth-submit" disabled={busy}>{busy ? 'Memproses...' : 'Masuk ke aplikasi'}</button>
-          </form>
+            <button type="button" className="auth-switch" onClick={() => { setShowRegister(true); setMessage('') }}>Belum punya akun? Daftar</button>
+          </form>}
           {message && <p className="notice error">{message}</p>}
           <p className="auth-footnote">Workspace privat untuk analisis dokumen akademik.</p>
         </section>
@@ -176,10 +239,13 @@ function App() {
             {message && <p className="notice">{message}</p>}
           </form>
           <section className="dashboard-reference-card dashboard-reference-history">
-            <div className="dashboard-reference-card-heading"><h2>Riwayat analisis</h2><button className="dashboard-reference-refresh" onClick={loadAnalyses}><LineIcon type="refresh" /> Muat ulang</button></div>
-            {analyses.length === 0 ? <div className="dashboard-reference-empty"><div className="dashboard-reference-empty-art"><svg width="100" height="100" viewBox="0 0 100 100" fill="none" aria-hidden="true"><rect x="25" y="15" width="45" height="60" rx="4" fill="white" stroke="#1e1b4b" strokeWidth="2.5"/><line x1="35" y1="30" x2="60" y2="30" stroke="#f27a61" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="40" x2="60" y2="40" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="50" x2="60" y2="50" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="60" x2="50" y2="60" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><circle cx="55" cy="55" r="14" fill="#fcfaf8" stroke="#1e1b4b" strokeWidth="3"/><line x1="65" y1="65" x2="78" y2="78" stroke="#f27a61" strokeWidth="6" strokeLinecap="round"/></svg></div><h3>Belum ada analisis.</h3><p>Dokumen yang Anda periksa akan muncul di sini.</p></div> : <div className="history">{analyses.map((item) => <div className="history-item" key={item.id}><div><strong>{item.title}</strong><span>{item.status} · {item.matched_chunks}/{item.total_chunks} chunk cocok</span></div><b>{item.similarity_index.toFixed(2)}%</b><button className="delete-button" onClick={() => handleDelete(item.id)} aria-label={`Hapus ${item.title}`}>Hapus</button></div>)}</div>}
+            <div className="dashboard-reference-card-heading"><h2>Riwayat analisis</h2><button className="dashboard-reference-refresh" onClick={() => { loadAnalyses(); loadStats() }}><LineIcon type="refresh" /> Muat ulang</button></div>
+            <div className="dashboard-reference-filters"><input value={historyQuery} onChange={(e) => { setHistoryQuery(e.target.value); setHistoryMeta({ ...historyMeta, page: 1 }) }} placeholder="Cari judul analisis..." /><select value={historyStatus} onChange={(e) => { setHistoryStatus(e.target.value); setHistoryMeta({ ...historyMeta, page: 1 }) }}><option value="">Semua status</option><option value="processing">Diproses</option><option value="completed">Selesai</option><option value="failed">Gagal</option></select></div>
+            {analyses.length === 0 ? <div className="dashboard-reference-empty"><div className="dashboard-reference-empty-art"><svg width="100" height="100" viewBox="0 0 100 100" fill="none" aria-hidden="true"><rect x="25" y="15" width="45" height="60" rx="4" fill="white" stroke="#1e1b4b" strokeWidth="2.5"/><line x1="35" y1="30" x2="60" y2="30" stroke="#f27a61" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="40" x2="60" y2="40" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="50" x2="60" y2="50" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="60" x2="50" y2="60" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><circle cx="55" cy="55" r="14" fill="#fcfaf8" stroke="#1e1b4b" strokeWidth="3"/><line x1="65" y1="65" x2="78" y2="78" stroke="#f27a61" strokeWidth="6" strokeLinecap="round"/></svg></div><h3>{historyQuery || historyStatus ? 'Tidak ada hasil' : 'Belum ada analisis.'}</h3><p>{historyQuery || historyStatus ? 'Coba ubah kata kunci atau filter.' : 'Dokumen yang Anda periksa akan muncul di sini.'}</p></div> : <div className="history">{analyses.map((item) => <div className="history-item" key={item.id}><div><strong>{item.title}</strong><span>{item.status} · {item.matched_chunks}/{item.total_chunks} chunk cocok</span></div><b>{item.similarity_index.toFixed(2)}%</b><div className="history-actions"><button className="history-action" onClick={() => handleRename(item)}>Edit</button>{item.report_url && <button className="history-action" onClick={() => handleOpenReport(item.report_url)}>Report</button>}<button className="delete-button" onClick={() => handleDelete(item.id)} aria-label={`Hapus ${item.title}`}>Hapus</button></div></div>)}</div>}
+            {historyMeta.totalPages > 1 && <div className="dashboard-reference-pagination"><button disabled={historyMeta.page <= 1} onClick={() => setHistoryMeta({ ...historyMeta, page: historyMeta.page - 1 })}>Sebelumnya</button><span>Halaman {historyMeta.page} dari {historyMeta.totalPages}</span><button disabled={historyMeta.page >= historyMeta.totalPages} onClick={() => setHistoryMeta({ ...historyMeta, page: historyMeta.page + 1 })}>Berikutnya</button></div>}
           </section>
         </div>
+        {stats && <section className="dashboard-reference-stats"><div><strong>{stats.total_analyses}</strong><span>Total analisis</span></div><div><strong>{stats.completed_analyses}</strong><span>Selesai</span></div><div><strong>{stats.processing_analyses}</strong><span>Diproses</span></div><div><strong>{Number(stats.average_similarity).toFixed(2)}%</strong><span>Rata-rata kemiripan</span></div></section>}
         {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks} dari {result.total_chunks} segmen cocok</p>{result.diagnostic_message && <p className="notice diagnostic">{result.diagnostic_message}</p>}{result.source_similarities?.length > 0 && <div className="source-summary"><h3>Sumber yang cocok</h3>{result.source_similarities.slice(0, 5).map((source) => <div className="source-summary-item" key={source.openalex_id || source.doi || source.title}><div><strong>{source.title}</strong><span>{source.matched_chunks} segmen · {Number(source.similarity_percentage).toFixed(2)}%</span></div>{source.url && <a href={source.url} target="_blank" rel="noreferrer">Buka sumber</a>}</div>)}</div>}</div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
       </section>
     </main>

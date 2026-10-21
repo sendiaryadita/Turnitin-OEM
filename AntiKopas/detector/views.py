@@ -85,13 +85,34 @@ def register_user(request):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def analysis_list(request):
-    """Mengembalikan riwayat analisis terbaru."""
-    limit = min(max(int(request.query_params.get("limit", 20)), 1), 100)
+    """Mengembalikan riwayat analisis dengan pencarian dan pagination."""
+    try:
+        page = max(int(request.query_params.get("page", 1)), 1)
+        page_size = min(max(int(request.query_params.get("page_size", 10)), 1), 50)
+    except (TypeError, ValueError):
+        return Response({"status": "error", "message": "Parameter halaman tidak valid"}, status=400)
+
     jobs = AnalysisJob.objects.select_related("document").filter(
         document__uploaded_by=request.user
-    )[:limit]
+    )
+    query = str(request.query_params.get("q", "")).strip()
+    status = str(request.query_params.get("status", "")).strip().lower()
+    if query:
+        jobs = jobs.filter(document__title__icontains=query)
+    if status in {choice.value for choice in AnalysisJob.Status}:
+        jobs = jobs.filter(status=status)
+
+    total = jobs.count()
+    total_pages = max((total + page_size - 1) // page_size, 1)
+    page = min(page, total_pages)
+    start = (page - 1) * page_size
+    jobs = jobs[start:start + page_size]
     return Response({
         "status": "success",
+        "count": total,
+        "page": page,
+        "page_size": page_size,
+        "total_pages": total_pages,
         "results": [
             {
                 "id": job.id,
@@ -102,13 +123,18 @@ def analysis_list(request):
                 "matched_chunks": job.matched_chunks,
                 "created_at": job.created_at,
                 "completed_at": job.completed_at,
+                "report_url": (
+                    request.build_absolute_uri(
+                        f"/api/reports/{os.path.basename(job.report.file.name)}/"
+                    ) if hasattr(job, "report") and job.report.file else None
+                ),
             }
             for job in jobs
         ],
     })
 
 
-@api_view(["GET", "DELETE"])
+@api_view(["GET", "PATCH", "DELETE"])
 @permission_classes([IsAuthenticated])
 def analysis_detail(request, analysis_id):
     """Mengembalikan detail analisis beserta chunk dan sumber."""
@@ -122,6 +148,16 @@ def analysis_detail(request, analysis_id):
             "status": "error",
             "message": "Analisis tidak ditemukan",
         }, status=404)
+
+    if request.method == "PATCH":
+        title = str(request.data.get("title", "")).strip()
+        if not title:
+            return Response({"status": "error", "message": "Judul wajib diisi"}, status=400)
+        if len(title) > 500:
+            return Response({"status": "error", "message": "Judul maksimal 500 karakter"}, status=400)
+        job.document.title = title
+        job.document.save(update_fields=["title", "updated_at"])
+        return Response({"status": "success", "message": "Judul berhasil diperbarui", "title": title})
 
     if request.method == "DELETE":
         document = job.document
@@ -184,6 +220,32 @@ def analysis_detail(request, analysis_id):
         },
         "chunks": chunks,
         "report_url": report_url,
+    })
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def analysis_stats(request):
+    jobs = AnalysisJob.objects.filter(document__uploaded_by=request.user)
+    completed = jobs.filter(status=AnalysisJob.Status.COMPLETED)
+    total_chunks = sum(jobs.values_list("total_chunks", flat=True))
+    matched_chunks = sum(jobs.values_list("matched_chunks", flat=True))
+    average_similarity = 0
+    if completed.exists():
+        average_similarity = sum(
+            float(value) for value in completed.values_list("similarity_index", flat=True)
+        ) / completed.count()
+    return Response({
+        "status": "success",
+        "total_analyses": jobs.count(),
+        "completed_analyses": completed.count(),
+        "processing_analyses": jobs.filter(
+            status__in=[AnalysisJob.Status.PENDING, AnalysisJob.Status.PROCESSING]
+        ).count(),
+        "failed_analyses": jobs.filter(status=AnalysisJob.Status.FAILED).count(),
+        "total_chunks": total_chunks,
+        "matched_chunks": matched_chunks,
+        "average_similarity": round(average_similarity, 2),
     })
 
 

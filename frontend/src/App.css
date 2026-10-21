@@ -247,3 +247,19 @@ button:disabled { opacity: .6; cursor: wait; }
   .dashboard-reference-intro p { font-size: 14px; line-height: 1.5; }
   .dashboard-reference-card-heading h2 { font-size: 19px; }
 }
+.auth-switch { border: 0; color: #f27a61; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+.dashboard-reference-filters { display: grid; grid-template-columns: 1fr 150px; gap: 8px; margin-bottom: 12px; }
+.dashboard-reference-filters input, .dashboard-reference-filters select { min-width: 0; padding: 9px 11px; border: 1px solid #e1dbd5; border-radius: 8px; outline: 0; color: #1e1b4b; background: #fff; font: inherit; font-size: 13px; }
+.dashboard-reference-filters input:focus, .dashboard-reference-filters select:focus { border-color: #f27a61; box-shadow: 0 0 0 3px #f27a6126; }
+.history-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; }
+.history-action { padding: 6px 9px; border: 1px solid #eadfd8; border-radius: 7px; color: #d65f42; background: #fff; cursor: pointer; font: inherit; font-size: 12px; font-weight: 700; }
+.history-action:hover { background: #fff4ef; }
+.dashboard-reference-history .delete-button { width: auto; margin: 0; padding: 6px 9px; }
+.dashboard-reference-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 18px; color: #6b7280; font-size: 12px; }
+.dashboard-reference-pagination button { padding: 7px 10px; border: 1px solid #eadfd8; border-radius: 7px; color: #d65f42; background: #fff; cursor: pointer; font: inherit; font-weight: 700; }
+.dashboard-reference-pagination button:disabled { opacity: .45; cursor: not-allowed; }
+.dashboard-reference-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-top: 24px; }
+.dashboard-reference-stats > div { display: flex; flex-direction: column; gap: 4px; padding: 16px; border: 1px solid #ebe6e1; border-radius: 12px; background: #fff; box-shadow: 0 4px 20px #00000006; }
+.dashboard-reference-stats strong { color: #1e1b4b; font-size: 22px; }
+.dashboard-reference-stats span { color: #6b7280; font-size: 12px; }
+@media (max-width: 620px) { .dashboard-reference-filters { grid-template-columns: 1fr; }.dashboard-reference-stats { grid-template-columns: repeat(2, 1fr); }.history-actions { width: 100%; margin-left: 0; }.dashboard-reference-history .history-item b { margin-left: auto; } }
