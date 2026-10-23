@@ -1,26 +1,26 @@
 
 """
 AntiKopas - OpenAlex Full-Text Retrieval
-STEP 5A
+AK_08.2 - Metadata First Preparation
 
 Fitur:
-- Search OpenAlex
-- Reconstruct abstract
-- Cari lokasi PDF open-access
-- Download PDF dengan batas ukuran dan timeout
-- Ekstraksi seluruh halaman PDF yang memenuhi batas
-- Fallback ke abstract
-- Metadata text_scope untuk membedakan sumber
-- Cache hasil unduhan
+- Pencarian jurnal OpenAlex
+- Rekonstruksi abstrak
+- Mode metadata_only
+- Penyimpanan lokasi PDF open access
+- Pengunduhan PDF ke RAM
+- Ekstraksi seluruh halaman PDF menggunakan PyMuPDF
+- Fallback ke abstrak
+- Cache ekstraksi PDF
 - Kompatibel dengan full_pipeline.py
 
-Catatan:
-Field "text" berisi:
-- full text, jika PDF berhasil diekstrak
-- abstract, jika full text tidak tersedia
+PENTING:
+search_literature(query) tetap menggunakan alur lama.
+search_literature(query, metadata_only=True) hanya mengambil
+metadata dan abstrak tanpa mengunduh PDF.
 
-Pengambilan full text dibatasi pada beberapa
-kandidat per pencarian supaya aplikasi ringan.
+Ranking BGE-M3 sebelum full-text retrieval akan
+diintegrasikan pada tahap berikutnya.
 """
 
 import io
@@ -35,94 +35,75 @@ from functools import lru_cache
 from urllib.parse import urljoin, urlsplit
 
 import requests
-
 from dotenv import load_dotenv
 
 
-# ==========================================
+# ============================================================
 # 1. KONFIGURASI
-# ==========================================
+# ============================================================
 
 load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-OPENALEX_URL = (
-    "https://api.openalex.org/works"
-)
+OPENALEX_URL = "https://api.openalex.org/works"
 
 OPENALEX_API_KEY = os.getenv(
     "OPENALEX_API_KEY"
 )
 
-# Batas agar tidak membebani laptop.
+# Batas lama dipertahankan untuk kompatibilitas.
 MAX_FULLTEXT_WORKS_PER_SEARCH = 2
 MAX_PDF_URLS_PER_WORK = 2
 
-# Maksimum ukuran PDF: 6 MB.
 MAX_PDF_BYTES = 6 * 1024 * 1024
-
-# Hanya ekstrak PDF sampai 35 halaman.
-# PDF lebih panjang memakai fallback abstract.
 MAX_PDF_PAGES = 35
-
-# Menolak dokumen yang terlalu besar
-# untuk pipeline embedding lokal.
 MAX_FULLTEXT_CHARACTERS = 120000
-
 MIN_FULLTEXT_WORDS = 120
 
 CONNECT_TIMEOUT = 5
 READ_TIMEOUT = 12
-
 MAX_REDIRECTS = 4
 
 PDF_HEADERS = {
-    "User-Agent": (
-        "AntiKopas/1.0 Academic Research"
-    ),
+    "User-Agent": "AntiKopas/1.0 Academic Research",
     "Accept": "application/pdf,*/*",
 }
 
 
-# ==========================================
-# 2. ABSTRACT RECONSTRUCTION
-# ==========================================
+# ============================================================
+# 2. REKONSTRUKSI ABSTRAK OPENALEX
+# ============================================================
 
 def reconstruct_abstract(inverted_index):
-    if not isinstance(
-        inverted_index,
-        dict,
-    ):
+    """
+    OpenAlex menyimpan abstrak sebagai inverted index.
+    Fungsi ini menyusunnya kembali menjadi teks.
+    """
+
+    if not isinstance(inverted_index, dict):
         return ""
 
     positions = []
 
-    for word, indexes in (
-        inverted_index.items()
-    ):
+    for word, indexes in inverted_index.items():
         if not isinstance(indexes, list):
             continue
 
         for index in indexes:
             if isinstance(index, int):
-                positions.append(
-                    (index, word)
-                )
+                positions.append((index, word))
 
-    positions.sort(
-        key=lambda item: item[0]
-    )
+    positions.sort(key=lambda item: item[0])
 
     return " ".join(
-        word
-        for _, word in positions
+        word for _, word in positions
     )
 
 
-# ==========================================
-# 3. CLEAN QUERY
-# ==========================================
+# ============================================================
+# 3. MEMBERSIHKAN QUERY
+# ============================================================
 
 def clean_search_query(query):
     if not query:
@@ -146,24 +127,23 @@ def clean_search_query(query):
         query,
     ).strip()
 
-    words = query.split()
-
-    return " ".join(
-        words[:12]
-    )
+    return " ".join(query.split()[:12])
 
 
-# ==========================================
-# 4. VALIDASI URL PDF
-# ==========================================
+# ============================================================
+# 4. VALIDASI URL PUBLIK
+# ============================================================
 
 def is_safe_public_url(url):
     """
-    Mengurangi risiko akses ke alamat
-    internal/lokal melalui URL PDF.
+    Menolak alamat internal dan lokal.
 
-    Ini pengamanan dasar, bukan sandbox
-    jaringan yang sempurna.
+    Setiap redirect juga diperiksa ulang.
+
+    Catatan:
+    Validasi DNS ini pengamanan dasar. Untuk deployment
+    publik, akses keluar sebaiknya juga dibatasi pada
+    level jaringan.
     """
 
     try:
@@ -184,7 +164,6 @@ def is_safe_public_url(url):
         ):
             return False
 
-        # Batasi port.
         if parsed.port not in (
             None,
             80,
@@ -207,22 +186,16 @@ def is_safe_public_url(url):
             return False
 
         try:
-            ip = ipaddress.ip_address(
-                hostname
-            )
-
+            ip = ipaddress.ip_address(hostname)
             return ip.is_global
 
         except ValueError:
             pass
 
-        # Periksa resolusi DNS.
         addresses = socket.getaddrinfo(
             hostname,
             parsed.port or (
-                443
-                if parsed.scheme == "https"
-                else 80
+                443 if parsed.scheme == "https" else 80
             ),
             type=socket.SOCK_STREAM,
         )
@@ -231,10 +204,8 @@ def is_safe_public_url(url):
             return False
 
         for address in addresses:
-            ip_text = address[4][0]
-
             ip = ipaddress.ip_address(
-                ip_text
+                address[4][0]
             )
 
             if not ip.is_global:
@@ -250,40 +221,36 @@ def is_safe_public_url(url):
         return False
 
 
-# ==========================================
-# 5. AMBIL LOKASI PDF OPEN ACCESS
-# ==========================================
+# ============================================================
+# 5. LOKASI PDF OPEN ACCESS
+# ============================================================
 
 def get_open_access_pdf_urls(work):
     """
-    Prioritas:
+    Urutan:
     1. best_oa_location
-    2. primary_location jika open access
-    3. locations[] jika open access
+    2. primary_location
+    3. locations
 
-    Hanya menggunakan direct PDF URLs.
-    Tidak scraping halaman publisher.
+    Hanya menerima pdf_url dari lokasi open access.
     """
+
+    if not isinstance(work, dict):
+        return []
 
     locations = []
 
-    best_oa = work.get(
-        "best_oa_location"
-    )
+    best_oa = work.get("best_oa_location")
 
     if isinstance(best_oa, dict):
         locations.append(best_oa)
 
-    primary = work.get(
-        "primary_location"
-    )
+    primary = work.get("primary_location")
 
     if isinstance(primary, dict):
         locations.append(primary)
 
-    for location in (
-        work.get("locations") or []
-    ):
+    for location in work.get("locations") or []:
         if isinstance(location, dict):
             locations.append(location)
 
@@ -310,37 +277,38 @@ def get_open_access_pdf_urls(work):
         seen.add(pdf_url)
         urls.append(pdf_url)
 
-    return urls[
-        :MAX_PDF_URLS_PER_WORK
-    ]
+        if len(urls) >= MAX_PDF_URLS_PER_WORK:
+            break
+
+    return urls
 
 
-# ==========================================
-# 6. DOWNLOAD PDF
-# ==========================================
+# ============================================================
+# 6. DOWNLOAD PDF TANPA MENYIMPAN KE DISK
+# ============================================================
 
 def download_pdf_bytes(pdf_url):
     """
-    Mengunduh PDF secara streaming.
+    Mengunduh PDF ke RAM.
 
-    Tidak menyimpan file secara permanen.
-    Menolak:
-    - URL tidak aman
-    - Redirect ke alamat internal
-    - File terlalu besar
-    - Respons bukan PDF
+    Memeriksa:
+    - URL publik
+    - Redirect
+    - Status HTTP
+    - Ukuran PDF
+    - Magic bytes %PDF-
+
+    Jika gagal, mengembalikan None.
     """
 
     current_url = pdf_url
 
-    for _ in range(
+    for redirect_index in range(
         MAX_REDIRECTS + 1
     ):
-        if not is_safe_public_url(
-            current_url
-        ):
+        if not is_safe_public_url(current_url):
             logger.warning(
-                "[FullText] URL PDF ditolak"
+                "[FullText] URL PDF tidak aman"
             )
             return None
 
@@ -357,12 +325,14 @@ def download_pdf_bytes(pdf_url):
             ) as response:
 
                 if response.status_code in (
-                    301, 302, 303, 307, 308
+                    301,
+                    302,
+                    303,
+                    307,
+                    308,
                 ):
-                    redirect_url = (
-                        response.headers.get(
-                            "Location"
-                        )
+                    redirect_url = response.headers.get(
+                        "Location"
                     )
 
                     if not redirect_url:
@@ -382,17 +352,13 @@ def download_pdf_bytes(pdf_url):
                     )
                     return None
 
-                content_length = (
-                    response.headers.get(
-                        "Content-Length"
-                    )
+                content_length = response.headers.get(
+                    "Content-Length"
                 )
 
                 if content_length:
                     try:
-                        if int(
-                            content_length
-                        ) > MAX_PDF_BYTES:
+                        if int(content_length) > MAX_PDF_BYTES:
                             logger.info(
                                 "[FullText] PDF terlalu besar"
                             )
@@ -403,10 +369,8 @@ def download_pdf_bytes(pdf_url):
                 buffer = io.BytesIO()
                 downloaded = 0
 
-                for block in (
-                    response.iter_content(
-                        chunk_size=65536
-                    )
+                for block in response.iter_content(
+                    chunk_size=65536
                 ):
                     if not block:
                         continue
@@ -415,7 +379,7 @@ def download_pdf_bytes(pdf_url):
 
                     if downloaded > MAX_PDF_BYTES:
                         logger.info(
-                            "[FullText] Download melewati batas"
+                            "[FullText] Download melebihi batas"
                         )
                         return None
 
@@ -423,8 +387,6 @@ def download_pdf_bytes(pdf_url):
 
                 pdf_data = buffer.getvalue()
 
-                # Validasi magic bytes.
-                # Jangan percaya Content-Type saja.
                 if not pdf_data.lstrip().startswith(
                     b"%PDF-"
                 ):
@@ -435,10 +397,15 @@ def download_pdf_bytes(pdf_url):
 
                 return pdf_data
 
+        except requests.exceptions.Timeout:
+            logger.info(
+                "[FullText] Timeout saat mengunduh PDF"
+            )
+            return None
+
         except requests.RequestException:
             logger.info(
-                "[FullText] Gagal mengambil PDF",
-                exc_info=False,
+                "[FullText] Koneksi PDF gagal"
             )
             return None
 
@@ -449,58 +416,53 @@ def download_pdf_bytes(pdf_url):
     return None
 
 
-# ==========================================
+# ============================================================
 # 7. EKSTRAKSI TEKS PDF
-# ==========================================
+# ============================================================
 
 def normalize_pdf_text(text):
     text = str(text or "")
 
-    # Soft hyphen.
-    text = text.replace(
-        "\u00ad",
-        "",
-    )
+    # Hilangkan soft hyphen.
+    text = text.replace("\u00ad", "")
 
-    # Gabungkan kata yang terpisah
-    # oleh akhir baris PDF.
+    # Satukan kata yang terpotong saat pergantian baris.
     text = re.sub(
         r"(?<=\w)-[ \t]*\n[ \t]*(?=\w)",
         "",
         text,
     )
 
-    # Hilangkan karakter kontrol.
+    # Hapus karakter kontrol.
     text = re.sub(
         r"[\x00-\x08\x0b\x0c\x0e-\x1f]",
         " ",
         text,
     )
 
-    return " ".join(
-        text.split()
-    )
+    return " ".join(text.split())
 
 
 def extract_pdf_fulltext(pdf_data):
     """
-    Ekstrak seluruh halaman jika PDF
-    memenuhi batas halaman dan ukuran teks.
+    Membaca halaman PDF menggunakan PyMuPDF.
 
-    PDF hasil scan gambar tidak di-OCR.
+    Teks dari seluruh halaman digabungkan.
+    PDF hasil scan gambar tanpa text layer
+    belum mendukung OCR.
     """
 
     try:
-        import fitz
+        import pymupdf
+
     except ImportError:
         logger.warning(
-            "[FullText] PyMuPDF belum terpasang. "
-            "Jalankan: pip install pymupdf"
+            "[FullText] PyMuPDF belum tersedia"
         )
         return None
 
     try:
-        document = fitz.open(
+        document = pymupdf.open(
             stream=pdf_data,
             filetype="pdf",
         )
@@ -513,10 +475,8 @@ def extract_pdf_fulltext(pdf_data):
 
             if page_count > MAX_PDF_PAGES:
                 logger.info(
-                    "[FullText] PDF %s halaman "
-                    "melebihi batas %s",
+                    "[FullText] PDF %s halaman melebihi batas",
                     page_count,
-                    MAX_PDF_PAGES,
                 )
                 return None
 
@@ -525,14 +485,10 @@ def extract_pdf_fulltext(pdf_data):
 
             for page in document:
                 page_text = (
-                    page.get_text(
-                        "text"
-                    ) or ""
+                    page.get_text("text") or ""
                 )
 
-                total_characters += len(
-                    page_text
-                )
+                total_characters += len(page_text)
 
                 if (
                     total_characters
@@ -558,7 +514,7 @@ def extract_pdf_fulltext(pdf_data):
         ):
             logger.info(
                 "[FullText] Teks PDF terlalu sedikit "
-                "atau berupa scan gambar"
+                "atau merupakan scan gambar"
             )
             return None
 
@@ -569,48 +525,52 @@ def extract_pdf_fulltext(pdf_data):
 
     except Exception:
         logger.info(
-            "[FullText] Ekstraksi PDF gagal",
-            exc_info=False,
+            "[FullText] Ekstraksi PDF gagal"
         )
         return None
 
 
-# ==========================================
-# 8. CACHE FULL TEXT
-# ==========================================
+# ============================================================
+# 8. CACHE TEKS PDF
+# ============================================================
 
 @lru_cache(maxsize=16)
 def retrieve_pdf_text(pdf_url):
-    pdf_data = download_pdf_bytes(
-        pdf_url
-    )
+    """
+    Cache hasil ekstraksi agar URL PDF yang
+    sama tidak perlu diunduh berulang.
+    """
+
+    pdf_data = download_pdf_bytes(pdf_url)
 
     if not pdf_data:
         return None
 
-    return extract_pdf_fulltext(
-        pdf_data
-    )
+    return extract_pdf_fulltext(pdf_data)
 
 
-# ==========================================
-# 9. FULL TEXT UNTUK SATU JURNAL
-# ==========================================
+# ============================================================
+# 9. MENGAMBIL FULL TEXT SATU JURNAL
+# ============================================================
 
 def get_work_fulltext(work):
     """
-    Mencoba beberapa lokasi OA.
-    Berhenti saat satu PDF berhasil.
+    Mencoba URL PDF OA secara berurutan.
+
+    Mengembalikan:
+    {
+        "text": ...,
+        "pages": ...,
+        "pdf_url": ...
+    }
+
+    Jika gagal, mengembalikan None.
     """
 
-    pdf_urls = get_open_access_pdf_urls(
-        work
-    )
+    pdf_urls = get_open_access_pdf_urls(work)
 
     for pdf_url in pdf_urls:
-        result = retrieve_pdf_text(
-            pdf_url
-        )
+        result = retrieve_pdf_text(pdf_url)
 
         if not result:
             continue
@@ -624,17 +584,155 @@ def get_work_fulltext(work):
     return None
 
 
-# ==========================================
-# 10. SEARCH OPENALEX
-# ==========================================
+# ============================================================
+# 10. MEMBANGUN DATA JURNAL
+# ============================================================
+
+def build_source_record(work):
+    """
+    Membangun metadata jurnal dari OpenAlex.
+
+    AK_08:
+    Menyimpan lokasi PDF agar dapat diakses
+    pada tahap retrieval setelah ranking BGE-M3.
+    """
+
+    if not isinstance(work, dict):
+        return None
+
+    abstract = reconstruct_abstract(
+        work.get("abstract_inverted_index")
+    )
+
+    primary_location = (
+        work.get("primary_location") or {}
+    )
+
+    if not isinstance(primary_location, dict):
+        primary_location = {}
+
+    best_oa_location = work.get(
+        "best_oa_location"
+    )
+
+    if not isinstance(best_oa_location, dict):
+        best_oa_location = None
+
+    locations = [
+        location
+        for location in (work.get("locations") or [])
+        if isinstance(location, dict)
+    ]
+
+    record = {
+        "source_id": work.get("id"),
+        "title": work.get("display_name"),
+        "year": work.get("publication_year"),
+        "doi": work.get("doi"),
+        "url": (
+            primary_location.get("landing_page_url")
+            or work.get("doi")
+        ),
+
+        # Field lama untuk full_pipeline.py.
+        "text": abstract,
+
+        # Metadata teks.
+        "abstract": abstract,
+        "text_scope": "abstract",
+        "fulltext_url": None,
+        "fulltext_pages": 0,
+        "fulltext_status": "abstract_only",
+
+        # AK_08: lokasi lengkap untuk tahap kedua.
+        "best_oa_location": best_oa_location,
+        "primary_location": primary_location,
+        "locations": locations,
+
+        "fulltext_locations": {
+            "best_oa_location": best_oa_location,
+            "primary_location": primary_location,
+            "locations": locations,
+        },
+    }
+
+    return record
+
+
+# ============================================================
+# 11. UPGRADE RECORD DENGAN FULL TEXT
+# ============================================================
+
+def upgrade_source_to_fulltext(source):
+    """
+    Mengambil PDF untuk satu record jurnal.
+
+    Jika berhasil:
+    - text diganti dengan isi PDF
+    - text_scope menjadi full_text
+
+    Jika gagal:
+    - text tetap abstrak
+    - text_scope tetap abstract
+
+    Fungsi ini nantinya dapat dipanggil setelah
+    ranking BGE-M3 pada full_pipeline.py.
+    """
+
+    if not isinstance(source, dict):
+        return source
+
+    fulltext_result = get_work_fulltext(source)
+
+    if not fulltext_result:
+        source["fulltext_status"] = (
+            "download_or_extract_failed"
+        )
+        return source
+
+    source["text"] = fulltext_result["text"]
+    source["text_scope"] = "full_text"
+
+    source["fulltext_url"] = (
+        fulltext_result["pdf_url"]
+    )
+
+    source["fulltext_pages"] = (
+        fulltext_result["pages"]
+    )
+
+    source["fulltext_status"] = "pdf_extracted"
+
+    return source
+
+
+# ============================================================
+# 12. SEARCH OPENALEX
+# ============================================================
 
 def search_literature(
     query,
     per_page=10,
+    metadata_only=False,
 ):
-    clean_query = clean_search_query(
-        query
-    )
+    """
+    Mencari jurnal menggunakan OpenAlex.
+
+    metadata_only=False:
+        Alur lama.
+        Cari jurnal lalu mencoba mengambil full text
+        maksimal dua jurnal per pencarian.
+
+    metadata_only=True:
+        Alur AK_08.
+        Hanya mencari metadata dan abstrak.
+        Tidak mengunduh PDF.
+
+    Setelah ranking BGE-M3, panggil:
+        upgrade_source_to_fulltext(source)
+    """
+
+    clean_query = clean_search_query(query)
 
     if len(clean_query) < 5:
         return []
@@ -648,9 +746,7 @@ def search_literature(
     }
 
     if OPENALEX_API_KEY:
-        params["api_key"] = (
-            OPENALEX_API_KEY
-        )
+        params["api_key"] = OPENALEX_API_KEY
 
     for attempt in range(3):
         try:
@@ -662,88 +758,67 @@ def search_literature(
 
             if response.status_code == 200:
                 data = response.json()
+                
+                # HTTP 200 belum tentu isi responsnya valid.
+                # Jangan perlakukan respons rusak sebagai hasil kosong.
+                if (
+                    not isinstance(data, dict)
+                    or not isinstance(data.get("results"), list)
+                ):
+                    raise RuntimeError(
+                        "Pencarian OpenAlex gagal: "
+                        "format respons jurnal tidak valid. "
+                        "Scan dibatalkan agar hasil tidak parsial."
+                    )
 
-                results = []
                 raw_works = data.get(
                     "results",
                     [],
                 )
 
-                # --------------------------------
-                # A. KUMPULKAN METADATA + ABSTRACT
-                # --------------------------------
+                if not isinstance(raw_works, list):
+                    logger.error(
+                        "[OpenAlex] Format results tidak valid"
+                    )
+                    return []
+
+                results = []
+                aligned_works = []
 
                 for work in raw_works:
                     if not isinstance(work, dict):
                         continue
 
-                    abstract = reconstruct_abstract(
-                        work.get(
-                            "abstract_inverted_index"
-                        )
+                    record = build_source_record(work)
+
+                    if record is None:
+                        continue
+
+                    results.append(record)
+                    aligned_works.append(work)
+
+                # ------------------------------------
+                # AK_08: METADATA ONLY
+                # ------------------------------------
+
+                if metadata_only:
+                    print(
+                        "[OpenAlex] "
+                        f"Metadata: {len(results)} jurnal"
                     )
+                    return results
 
-                    primary_location = (
-                        work.get(
-                            "primary_location"
-                        ) or {}
-                    )
-
-                    if not isinstance(
-                        primary_location,
-                        dict,
-                    ):
-                        primary_location = {}
-
-                    results.append({
-                        "source_id": work.get("id"),
-                        "title": work.get(
-                            "display_name"
-                        ),
-                        "year": work.get(
-                            "publication_year"
-                        ),
-                        "doi": work.get("doi"),
-                        "url": (
-                            primary_location.get(
-                                "landing_page_url"
-                            )
-                            or work.get("doi")
-                        ),
-
-                        # Kompatibel dengan
-                        # pipeline sebelumnya.
-                        "text": abstract,
-
-                        # Metadata tambahan.
-                        "abstract": abstract,
-                        "text_scope": "abstract",
-                        "fulltext_url": None,
-                        "fulltext_pages": 0,
-                        "fulltext_status": (
-                            "abstract_only"
-                        ),
-                    })
-
-                # --------------------------------
-                # B. UPGRADE KE FULL TEXT
-                # --------------------------------
+                # ------------------------------------
+                # ALUR LAMA: DOWNLOAD FULL TEXT
+                # ------------------------------------
 
                 attempted_works = 0
                 successful_works = 0
 
-                result_index = 0
-
-                for work in raw_works:
-                    if not isinstance(work, dict):
-                        continue
-
-                    if result_index >= len(results):
-                        break
-
-                    source = results[result_index]
-                    result_index += 1
-
+                for source, work in zip(
+                    results,
+                    aligned_works,
+                ):
                     if (
                         attempted_works
                         >= MAX_FULLTEXT_WORKS_PER_SEARCH
@@ -751,9 +826,7 @@ def search_literature(
                         break
 
                     pdf_urls = (
-                        get_open_access_pdf_urls(
-                            work
-                        )
+                        get_open_access_pdf_urls(work)
                     )
 
                     if not pdf_urls:
@@ -761,53 +834,13 @@ def search_literature(
 
                     attempted_works += 1
 
-                    fulltext_result = None
+                    upgrade_source_to_fulltext(source)
 
-                    for pdf_url in pdf_urls:
-                        extracted = retrieve_pdf_text(
-                            pdf_url
-                        )
-
-                        if not extracted:
-                            continue
-
-                        fulltext_result = {
-                            "text": extracted["text"],
-                            "pages": extracted["pages"],
-                            "pdf_url": pdf_url,
-                        }
-
-                        break
-
-                    if not fulltext_result:
-                        source[
-                            "fulltext_status"
-                        ] = "download_or_extract_failed"
-                        continue
-
-                    # "text" sekarang diisi
-                    # isi jurnal yang dibaca.
-                    source["text"] = (
-                        fulltext_result["text"]
-                    )
-
-                    source["text_scope"] = (
-                        "full_text"
-                    )
-
-                    source["fulltext_url"] = (
-                        fulltext_result["pdf_url"]
-                    )
-
-                    source["fulltext_pages"] = (
-                        fulltext_result["pages"]
-                    )
-
-                    source["fulltext_status"] = (
-                        "pdf_extracted"
-                    )
-
-                    successful_works += 1
+                    if (
+                        source.get("text_scope")
+                        == "full_text"
+                    ):
+                        successful_works += 1
 
                 logger.info(
                     "[OpenAlex FullText] "
@@ -831,59 +864,77 @@ def search_literature(
                 return results
 
             if response.status_code in (
-                429, 500, 502, 503, 504
+                429,
+                500,
+                502,
+                503,
+                504,
             ):
                 logger.warning(
-                    "OpenAlex gagal sementara: "
-                    "HTTP %s (percobaan %s/3)",
+                    "[OpenAlex] HTTP %s "
+                    "(percobaan %s/3)",
                     response.status_code,
                     attempt + 1,
                 )
 
                 if attempt < 2:
-                    time.sleep(
-                        2 ** attempt
-                    )
+                    time.sleep(2 ** attempt)
 
                 continue
 
-            # Hindari mencetak URL berisi API key.
             logger.error(
-                "OpenAlex menolak request: HTTP %s",
+                "[OpenAlex] Request ditolak HTTP %s",
                 response.status_code,
             )
-
-            return []
+            
+            raise RuntimeError(
+                "Pencarian OpenAlex gagal: "
+                f"server mengembalikan HTTP {response.status_code}. "
+                "Scan dibatalkan agar hasil tidak parsial."
+            )
 
         except (
             requests.exceptions.Timeout,
             requests.exceptions.ConnectionError,
         ):
             logger.warning(
-                "Koneksi OpenAlex gagal "
+                "[OpenAlex] Koneksi gagal "
                 "(percobaan %s/3)",
                 attempt + 1,
             )
 
             if attempt < 2:
-                time.sleep(
-                    2 ** attempt
-                )
+                time.sleep(2 ** attempt)
+
 
         except (
             ValueError,
             TypeError,
             KeyError,
-        ):
+        ) as exc:
             logger.error(
                 "Respons OpenAlex tidak valid"
             )
 
-            return []
+            raise RuntimeError(
+                "Pencarian OpenAlex gagal: "
+                "respons dari server tidak dapat diproses. "
+                "Scan dibatalkan agar hasil tidak parsial."
+            ) from exc
+
+
 
     logger.error(
         "OpenAlex tidak tersedia setelah "
         "3 percobaan"
     )
 
-    return []
+    raise RuntimeError(
+        "Pencarian OpenAlex gagal setelah 3 percobaan. "
+        "Koneksi atau layanan sumber akademik "
+        "sedang bermasalah. "
+        "Scan dibatalkan agar hasil similarity "
+        "tidak dihitung dari jurnal yang tidak lengkap. "
+        "Silakan coba kembali."
+    )
+

@@ -24,6 +24,361 @@ function App() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
 
+  
+  // Popup ketika pencarian jurnal OpenAlex gagal.
+  // Tidak mengubah backend, model AI, atau logika scan.
+  useEffect(() => {
+    if (!token || busy) return
+
+    const errorText = String(message || '').toLowerCase()
+
+    const literatureFailed =
+      errorText.includes('pencarian openalex gagal') ||
+      errorText.includes('openalex tidak tersedia')
+
+    if (!literatureFailed) return
+
+    const style = document.createElement('style')
+
+    style.textContent = `
+      .antikopas-literature-modal {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        margin: 0;
+        width: min(420px, calc(100% - 32px));
+        max-width: 420px;
+        box-sizing: border-box;
+        padding: 32px 28px;
+        border: 1px solid #f5d9d0;
+        border-radius: 22px;
+        background: #ffffff;
+        box-shadow: 0 24px 70px rgba(20, 27, 64, 0.22);
+        text-align: center;
+        color: #171d4b;
+      }
+
+      .antikopas-literature-modal::backdrop {
+        background: rgba(18, 23, 51, 0.52);
+        backdrop-filter: blur(4px);
+      }
+
+      .antikopas-literature-icon {
+        display: grid;
+        place-items: center;
+        width: 62px;
+        height: 62px;
+        margin: 0 auto 18px;
+        border-radius: 50%;
+        background: #fff0e9;
+        color: #e97855;
+        font-size: 30px;
+        font-weight: 800;
+      }
+
+      .antikopas-literature-title {
+        margin: 0 0 12px;
+        color: #171d4b;
+        font-size: 23px;
+        line-height: 1.3;
+        font-weight: 800;
+      }
+
+      .antikopas-literature-description {
+        margin: 0;
+        color: #626c85;
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .antikopas-literature-retry,
+      .antikopas-literature-close {
+        display: block;
+        width: 100%;
+        padding: 14px 20px;
+        border-radius: 12px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .antikopas-literature-retry {
+        margin-top: 26px;
+        background: #e97855;
+        color: white;
+        border: none;
+      }
+
+      .antikopas-literature-retry:hover {
+        background: #d96544;
+      }
+
+      .antikopas-literature-close {
+        margin-top: 10px;
+        background: #ffffff;
+        color: #171d4b;
+        border: 1px solid #e6e7ef;
+      }
+
+      .antikopas-literature-close:hover {
+        background: #f7f8fc;
+      }
+    `
+
+    document.head.appendChild(style)
+
+    const dialog = document.createElement('dialog')
+    dialog.className = 'antikopas-literature-modal'
+    dialog.setAttribute(
+      'aria-labelledby',
+      'antikopas-literature-title'
+    )
+
+    // Konten bersifat statis, tanpa HTML dari server.
+    dialog.innerHTML = `
+      <div class="antikopas-literature-icon">!</div>
+
+      <h2
+        id="antikopas-literature-title"
+        class="antikopas-literature-title"
+      >
+        Koneksi Literatur Gagal
+      </h2>
+
+      <p class="antikopas-literature-description">
+        Sistem belum berhasil mengambil seluruh sumber
+        akademik dari OpenAlex.
+        Analisis dibatalkan agar hasil kemiripan
+        tidak menyesatkan.
+        Silakan coba lagi.
+      </p>
+
+      <button
+        type="button"
+        class="antikopas-literature-retry"
+      >
+        Coba Lagi
+      </button>
+
+      <button
+        type="button"
+        class="antikopas-literature-close"
+      >
+        Tutup
+      </button>
+    `
+
+    document.body.appendChild(dialog)
+
+    const retryButton = dialog.querySelector(
+      '.antikopas-literature-retry'
+    )
+
+    const closeButton = dialog.querySelector(
+      '.antikopas-literature-close'
+    )
+
+    function closeLiteratureModal() {
+      if (dialog.open) dialog.close()
+      setMessage('')
+    }
+
+    function retryLiteratureScan() {
+      // Ambil form upload yang sudah ada di dashboard.
+      const uploadForm = document.querySelector(
+        'form.dashboard-reference-upload'
+      )
+
+      closeLiteratureModal()
+
+      // Menjalankan ulang fungsi handleUpload yang asli
+      // melalui submit form, tanpa menyalin kode scan.
+      if (uploadForm && !busy) {
+        uploadForm.requestSubmit()
+      }
+    }
+
+    function handleEscape(event) {
+      event.preventDefault()
+      closeLiteratureModal()
+    }
+
+    retryButton.addEventListener(
+      'click',
+      retryLiteratureScan
+    )
+
+    closeButton.addEventListener(
+      'click',
+      closeLiteratureModal
+    )
+
+    dialog.addEventListener(
+      'cancel',
+      handleEscape
+    )
+
+    dialog.showModal()
+
+    return () => {
+      retryButton.removeEventListener(
+        'click',
+        retryLiteratureScan
+      )
+
+      closeButton.removeEventListener(
+        'click',
+        closeLiteratureModal
+      )
+
+      dialog.removeEventListener(
+        'cancel',
+        handleEscape
+      )
+
+      if (dialog.open) dialog.close()
+
+      dialog.remove()
+      style.remove()
+    }
+  }, [message, token, busy])
+
+  // Modal custom ketika sesi login telah berakhir.
+  useEffect(() => {
+    if (!token) return
+
+    const sessionExpired =
+      message === 'Request gagal (401)' ||
+      message === 'Report gagal dibuka (401)'
+
+    if (!sessionExpired) return
+
+    // Styling modal khusus AntiKopas.
+    const style = document.createElement('style')
+    style.textContent = `
+      .antikopas-session-modal {
+        width: min(420px, calc(100% - 32px));
+        max-width: 420px;
+        box-sizing: border-box;
+        padding: 32px 28px;
+        border: 1px solid #f5d9d0;
+        border-radius: 22px;
+        background: #ffffff;
+        box-shadow: 0 24px 70px rgba(20, 27, 64, 0.22);
+        text-align: center;
+        color: #171d4b;
+        position: fixed;
+        inset: 0;
+        margin: auto;
+      }
+
+      .antikopas-session-modal::backdrop {
+        background: rgba(18, 23, 51, 0.52);
+        backdrop-filter: blur(4px);
+      }
+
+      .antikopas-session-icon {
+        display: grid;
+        place-items: center;
+        width: 62px;
+        height: 62px;
+        margin: 0 auto 18px;
+        border-radius: 50%;
+        background: #fff0e9;
+        color: #e97855;
+        font-size: 30px;
+        font-weight: 800;
+      }
+
+      .antikopas-session-title {
+        margin: 0 0 12px;
+        font-size: 23px;
+        line-height: 1.3;
+        font-weight: 800;
+        color: #171d4b;
+      }
+
+      .antikopas-session-description {
+        margin: 0;
+        color: #626c85;
+        font-size: 14px;
+        line-height: 1.7;
+      }
+
+      .antikopas-session-button {
+        display: block;
+        width: 100%;
+        margin-top: 26px;
+        padding: 14px 20px;
+        background: #e97855;
+        color: #ffffff;
+        border: none;
+        border-radius: 12px;
+        font-size: 15px;
+        font-weight: 700;
+        cursor: pointer;
+      }
+
+      .antikopas-session-button:hover {
+        background: #d96544;
+      }
+    `
+
+    document.head.appendChild(style)
+
+    // Membuat dialog tanpa mengubah struktur App.jsx.
+    const dialog = document.createElement('dialog')
+    dialog.className = 'antikopas-session-modal'
+
+    const icon = document.createElement('div')
+    icon.className = 'antikopas-session-icon'
+    icon.textContent = '!'
+
+    const title = document.createElement('h2')
+    title.className = 'antikopas-session-title'
+    title.textContent = 'Sesi Anda Telah Berakhir'
+
+    const description = document.createElement('p')
+    description.className = 'antikopas-session-description'
+    description.textContent =
+      'Silakan login kembali untuk melanjutkan menggunakan AntiKopas.'
+
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'antikopas-session-button'
+    button.textContent = 'OK, Login Kembali'
+
+    dialog.append(icon, title, description, button)
+    document.body.appendChild(dialog)
+
+    // Menjaga agar dialog tidak tertutup sebelum konfirmasi.
+    const preventClose = (event) => event.preventDefault()
+    dialog.addEventListener('cancel', preventClose)
+
+    button.addEventListener('click', () => {
+      localStorage.removeItem('antikopas_access')
+      localStorage.removeItem('antikopas_refresh')
+
+      dialog.close()
+
+      setToken(null)
+      setShowLogin(true)
+      setShowRegister(false)
+      setResult(null)
+      setMessage('')
+    })
+
+    dialog.showModal()
+
+    return () => {
+      if (dialog.open) dialog.close()
+      dialog.remove()
+      style.remove()
+    }
+  }, [message, token])
+
+
   const loadAnalyses = useCallback(async () => {
     try {
       const data = await api.listAnalyses({ page: historyMeta.page, query: historyQuery, status: historyStatus })

@@ -18,7 +18,11 @@ from sentence_transformers import (
 from .cloudflare_embeddings import CloudflareBGEEmbedding
 
 from .document_analyzer import chunk_text
-from .openalex import search_literature
+from .openalex import (
+    search_literature,
+    get_open_access_pdf_urls,
+    upgrade_source_to_fulltext,
+)
 
 
 # ==================================================
@@ -35,6 +39,7 @@ CROSS_ENCODER_MODEL = (
 
 OPENALEX_PER_PAGE = 25
 MAX_CANDIDATES = 50
+MAX_FULLTEXT_PDF_ATTEMPTS = 2
 MAX_MATCHED_SOURCES = 20
 
 MAX_SOURCE_PAIRS_PER_CHUNK = 6
@@ -55,8 +60,6 @@ MIN_SOURCE_COVERAGE = 0.05
 
 REQUIRE_DOI = True
 
-# Validasi bukti bersifat konservatif.
-MIN_SHARED_KEYWORDS = 3
 
 # Tidak ada angka yang dipaksa harus positif.
 
@@ -90,47 +93,6 @@ print("[AntiKopas] Model aktif: Academic V2")
 # 3. NORMALISASI
 # ==================================================
 
-STOPWORDS = {
-    "pengaruh", "penggunaan", "pemanfaatan",
-    "terhadap", "dalam", "pada", "untuk",
-    "dengan", "yang", "dan", "atau",
-    "dari", "sebagai", "melalui", "suatu",
-    "studi", "kajian", "analisis", "peran",
-    "hubungan", "dampak", "hasil",
-    "penelitian", "implementasi", "penerapan",
-    "strategi", "tinjauan", "literatur",
-    "sistematis", "systematic", "literature",
-    "review", "study", "effect", "impact",
-    "influence", "of", "the", "and",
-    "for", "with", "from", "on", "in",
-    "to", "a", "an", "based", "approach",
-    "era", "tahun", "model", "berbasis",
-    "meningkatkan", "efektivitas",
-    "dapat", "akan", "telah", "adalah",
-    "menjadi", "memiliki", "memberikan",
-    "menunjukkan", "menyatakan",
-    "tersebut", "sehingga", "bahwa",
-    "serta", "antara", "oleh",
-    "lebih", "juga", "tidak",
-    "sebuah", "beberapa", "sejumlah",
-    "secara", "umum", "khusus",
-    "melakukan", "dilakukan",
-    "digunakan", "menggunakan",
-    "membantu", "mendukung",
-    "memberi", "membuat",
-    "menurut", "melihat",
-    "seperti", "karena", "mereka",
-    "hasilnya", "berbagai",
-    "teknologi", "kecerdasan",
-    "buatan", "pendidikan",
-    "pembelajaran", "belajar",
-    "academic", "education",
-    "learning", "students",
-    "student", "research",
-    "results", "technology",
-}
-
-
 def normalize_title(value):
     return " ".join(
         re.findall(
@@ -151,102 +113,6 @@ def normalize_doi(value):
     )
 
     return text.rstrip(".,;)]}")
-
-
-def topic_terms(value):
-    text = normalize_title(value)
-
-    text = re.sub(
-        r"\bartificial intelligence\b"
-        r"|\bkecerdasan buatan\b"
-        r"|\bchat\s*gpt\b"
-        r"|\bchatbot\b"
-        r"|\bgenerative ai\b",
-        " ai ",
-        text,
-    )
-
-    text = re.sub(
-        r"\bpembelajaran\b"
-        r"|\bpendidikan\b"
-        r"|\blearning\b"
-        r"|\beducation\b",
-        " belajar ",
-        text,
-    )
-
-    text = re.sub(
-        r"\bmotivation\b",
-        " motivasi ",
-        text,
-    )
-
-    text = re.sub(
-        r"\bcompetenc(?:e|y)\b",
-        " kompetensi ",
-        text,
-    )
-
-    return {
-        word
-        for word in text.split()
-        if len(word) >= 2
-        and word not in STOPWORDS
-    }
-
-
-# ==================================================
-# 4. FILTER TOPIK SUMBER
-# ==================================================
-
-def relevant_to_topic(
-    document_title,
-    source_title,
-    source_abstract,
-):
-    target = topic_terms(document_title)
-
-    source_terms = topic_terms(
-        source_title
-    )
-
-    abstract_terms = topic_terms(
-        source_abstract
-    )
-
-    if not target or not source_terms:
-        return False
-
-    if "ai" in target and "ai" not in source_terms:
-        return False
-
-    if "mahasiswa" in target:
-        school_terms = {
-            "siswa", "murid", "guru",
-            "smp", "sma", "smk", "sd",
-        }
-
-        if (
-            source_terms & school_terms
-            and "mahasiswa" not in source_terms
-        ):
-            return False
-
-    other_topics = target - {"ai"}
-
-    if "ai" in target:
-        return (
-            len(other_topics & source_terms) >= 1
-            or len(other_topics & abstract_terms) >= 2
-        )
-
-    return (
-        len(target & source_terms) >= 2
-        or (
-            len(target & source_terms) >= 1
-            and len(target & abstract_terms) >= 2
-        )
-    )
 
 
 def is_self_match(
@@ -395,6 +261,25 @@ NUMBERED_HEADING_RE = re.compile(
     r"|$)"
 )
 
+
+# Pendeteksi heading bernomor dengan huruf campuran.
+# Contoh:
+# 1. Pendahuluan
+# 2. Konsep dan Pelaksanaan Bank Sampah
+# 6. Teks Pembanding: Pengamatan Astronomi
+MIXED_CASE_HEADING_RE = re.compile(
+    r"(?<!\w)"
+    r"\d{1,2}(?:\.\d{1,2})*\.\s+"
+    r"(?:"
+    r"[A-ZÀ-Þ][A-Za-zÀ-ÿ0-9/:&-]*"
+    r"(?:\s+(?:dan|atau|dalam|terhadap|untuk|"
+    r"pada|di|ke|dari|dengan|sebagai|yang|serta))?"
+    r"\s*"
+    r"){1,12}"
+    r"(?=\s*[A-ZÀ-Þ][a-zà-ÿ]+\s+[a-zà-ÿ]|$)"
+)
+
+
 PLAIN_HEADING_RE = re.compile(
     r"(?<!\w)"
     r"(?:ABSTRAK|ABSTRACT|PENDAHULUAN|"
@@ -425,6 +310,12 @@ def split_document_sections(text):
     matches.extend(
         PLAIN_HEADING_RE.finditer(text)
     )
+    
+    # Tambahan deteksi judul subbab huruf campuran.
+    matches.extend(
+        MIXED_CASE_HEADING_RE.finditer(text)
+    )
+
 
     matches.sort(
         key=lambda match: (
@@ -718,323 +609,68 @@ def build_document_chunks(text):
 
 
 # ==================================================
-# 8. VALIDASI KONSEP PER PASANGAN
+# 8. VALIDASI KANDIDAT UNTUK ACADEMIC V2
 # ==================================================
-
-# Ini bukan classifier tambahan yang terlatih.
-# Ini guardrail berbasis istilah/konsep untuk
-# membantu menolak pasangan tidak konsisten.
-
-CONCEPT_PATTERNS = {
-    "ai": [
-        r"\bai\b",
-        r"\bartificial intelligence\b",
-        r"\bkecerdasan buatan\b",
-        r"\bchatgpt\b",
-        r"\bchat\s+gpt\b",
-        r"\bchatbot\b",
-        r"\bgenerative ai\b",
-    ],
-    "chatgpt": [
-        r"\bchatgpt\b",
-        r"\bchat\s+gpt\b",
-    ],
-    "academic": [
-        r"\bmahasiswa\b",
-        r"\bperguruan tinggi\b",
-        r"\bperkuliahan\b",
-        r"\bkuliah\b",
-        r"\bkampus\b",
-        r"\buniversitas\b",
-        r"\bcollege students?\b",
-        r"\buniversity students?\b",
-    ],
-    "learning": [
-        r"\bbelajar\b",
-        r"\bpembelajaran\b",
-        r"\bpendidikan\b",
-        r"\bpengajaran\b",
-        r"\blearning\b",
-        r"\beducation\b",
-        r"\bteaching\b",
-    ],
-    "motivation": [
-        r"\bmotivasi\b",
-        r"\bmotivation\b",
-        r"\bintrinsik\b",
-        r"\bintrinsic\b",
-        r"\bsemangat belajar\b",
-        r"\bdorongan belajar\b",
-    ],
-    "critical": [
-        r"\bberpikir kritis\b",
-        r"\bpemikiran kritis\b",
-        r"\bberfikir kritis\b",
-        r"\bcritical thinking\b",
-        r"\bkemampuan analitis\b",
-        r"\bketerampilan analitis\b",
-    ],
-    "dependence": [
-        r"\bketergantungan\b",
-        r"\bbergantung\b",
-        r"\bover.reliance\b",
-        r"\bdependenc\w*\b",
-    ],
-    "ethics": [
-        r"\betika\b",
-        r"\betis\b",
-        r"\bprivasi\b",
-        r"\bintegritas akademik\b",
-        r"\bplagiarisme\b",
-        r"\bplagiarism\b",
-        r"\bacademic integrity\b",
-    ],
-    "literacy": [
-        r"\bliterasi\b",
-        r"\bliteracy\b",
-        r"\bdigital literacy\b",
-    ],
-    "feedback": [
-        r"\bum[p]?an balik\b",
-        r"\bfeedback\b",
-        r"\brespon langsung\b",
-    ],
-    "autonomy": [
-        r"\bkemandirian\b",
-        r"\bmandiri\b",
-        r"\bautonomy\b",
-        r"\bself.directed\b",
-        r"\bself.regulat\w*\b",
-    ],
-    "competency": [
-        r"\bkompetensi\b",
-        r"\bkompeten\b",
-        r"\bcompetenc\w*\b",
-        r"\bketerampilan\b",
-        r"\bkemampuan\b",
-    ],
-    "writing": [
-        r"\bmenulis\b",
-        r"\bpenulisan\b",
-        r"\btulisan\b",
-        r"\bwriting\b",
-        r"\bwacana\b",
-    ],
-    "programming": [
-        r"\bpemrograman\b",
-        r"\bprogramming\b",
-        r"\bcoding\b",
-        r"\bmatlab\b",
-        r"\bsource code\b",
-    ],
-    "agriculture": [
-        r"\birigasi\b",
-        r"\bpadi\b",
-        r"\bgabah\b",
-        r"\bpertanian\b",
-        r"\btanaman\b",
-        r"\bpanen\b",
-        r"\bberas\b",
-        r"\bperkebunan\b",
-        r"\bpupuk\b",
-        r"\bhasil tani\b",
-        r"\bcrop\b",
-        r"\birrigation\b",
-    ],
-    "marine": [
-        r"\blamun\b",
-        r"\bpesisir\b",
-        r"\bsedimen\b",
-        r"\blaut\b",
-        r"\bperairan\b",
-        r"\bbentik\b",
-        r"\bkekeruhan\b",
-        r"\bmarine\b",
-        r"\bseagrass\b",
-    ],
-}
-
-COMPILED_CONCEPTS = {
-    concept: [
-        re.compile(pattern, re.IGNORECASE)
-        for pattern in patterns
-    ]
-    for concept, patterns in CONCEPT_PATTERNS.items()
-}
-
-# Konsep umum tidak cukup sendirian
-# untuk membuktikan kecocokan.
-GENERAL_CONCEPTS = {
-    "ai",
-    "academic",
-    "learning",
-}
-
-# Domain yang sangat spesifik.
-DOMAIN_CONCEPTS = {
-    "agriculture",
-    "marine",
-}
-
-
-@lru_cache(maxsize=8192)
-def evidence_concepts(text):
-    text = unicodedata.normalize(
-        "NFKC",
-        str(text or ""),
-    ).casefold()
-
-    found = set()
-
-    for concept, patterns in (
-        COMPILED_CONCEPTS.items()
-    ):
-        if any(
-            pattern.search(text)
-            for pattern in patterns
-        ):
-            found.add(concept)
-
-    return frozenset(found)
-
-
-@lru_cache(maxsize=8192)
-def evidence_keywords(text):
-    text = unicodedata.normalize(
-        "NFKC",
-        str(text or ""),
-    ).casefold()
-
-    text = re.sub(
-        r"\bartificial intelligence\b"
-        r"|\bkecerdasan buatan\b",
-        " ai ",
-        text,
-    )
-
-    text = re.sub(
-        r"\bchat\s+gpt\b",
-        " chatgpt ",
-        text,
-    )
-
-    words = re.findall(
-        r"[a-zà-ÿ]{4,}",
-        text,
-    )
-
-    return frozenset({
-        word
-        for word in words
-        if word not in STOPWORDS
-    })
-
 
 def validate_pair_evidence(
     uploaded_chunk,
     source_excerpt,
 ):
     """
-    Menghasilkan keputusan dan alasan.
+    Mempersiapkan pasangan untuk Academic V2.
 
-    Keputusan ini hanya pemeriksaan awal
-    konsistensi isi, bukan putusan plagiarisme.
+    Tidak menggunakan daftar topik manual.
+
+    BGE-M3 memilih kandidat berdasarkan semantik.
+    Academic V2 menentukan kecocokan final.
+
+    accepted=True hanya berarti pasangan boleh
+    diperiksa oleh CrossEncoder, bukan sudah cocok.
     """
 
-    chunk_concepts = set(
-        evidence_concepts(uploaded_chunk)
+    uploaded_text = str(
+        uploaded_chunk or ""
+    ).strip()
+
+    source_text = str(
+        source_excerpt or ""
+    ).strip()
+
+    if not uploaded_text or not source_text:
+        return {
+            "accepted": False,
+            "reason": "empty_passage",
+            "shared_concepts": [],
+            "shared_keywords": [],
+        }
+
+    # Kesamaan kata untuk audit laporan saja.
+    # Tidak digunakan untuk menerima atau menolak.
+    uploaded_words = set(
+        re.findall(
+            r"[^\\W\\d_]{4,}",
+            uploaded_text.casefold(),
+            flags=re.UNICODE,
+        )
     )
 
-    source_concepts = set(
-        evidence_concepts(source_excerpt)
+    source_words = set(
+        re.findall(
+            r"[^\\W\\d_]{4,}",
+            source_text.casefold(),
+            flags=re.UNICODE,
+        )
     )
 
-    chunk_keywords = set(
-        evidence_keywords(uploaded_chunk)
-    )
-
-    source_keywords = set(
-        evidence_keywords(source_excerpt)
-    )
-
-    shared_concepts = (
-        chunk_concepts & source_concepts
-    )
-
-    shared_keywords = (
-        chunk_keywords & source_keywords
-    )
-
-    # Guardrail untuk perbedaan domain yang jelas.
-    for domain in DOMAIN_CONCEPTS:
-        if (
-            domain in chunk_concepts
-            and domain not in source_concepts
-        ):
-            return {
-                "accepted": False,
-                "reason": "domain_conflict",
-                "shared_concepts": sorted(
-                    shared_concepts
-                ),
-                "shared_keywords": sorted(
-                    shared_keywords
-                ),
-            }
-
-        if (
-            domain in source_concepts
-            and domain not in chunk_concepts
-        ):
-            return {
-                "accepted": False,
-                "reason": "domain_conflict",
-                "shared_concepts": sorted(
-                    shared_concepts
-                ),
-                "shared_keywords": sorted(
-                    shared_keywords
-                ),
-            }
-
-    informative = (
-        shared_concepts - GENERAL_CONCEPTS
-    )
-
-    # Dua konsep beririsan dan setidaknya
-    # satu di antaranya spesifik.
-    concept_supported = (
-        len(shared_concepts) >= 2
-        and len(informative) >= 1
-    )
-
-    # Atau istilah bermakna yang beririsan
-    # cukup banyak, dengan minimal
-    # satu kesamaan konsep.
-    keyword_supported = (
-        len(shared_concepts) >= 1
-        and len(shared_keywords)
-        >= MIN_SHARED_KEYWORDS
-    )
-
-    accepted = (
-        concept_supported
-        or keyword_supported
+    shared_terms = sorted(
+        uploaded_words & source_words
     )
 
     return {
-        "accepted": accepted,
-        "reason": (
-            "supported"
-            if accepted
-            else "insufficient_evidence"
-        ),
-        "shared_concepts": sorted(
-            shared_concepts
-        ),
-        "shared_keywords": sorted(
-            shared_keywords
-        ),
+        "accepted": True,
+        "reason": "semantic_candidate",
+        "shared_concepts": [],
+        "shared_keywords": shared_terms[:15],
     }
 
 
@@ -1109,6 +745,7 @@ def collect_sources(
         results = search_literature(
             query,
             per_page=OPENALEX_PER_PAGE,
+            metadata_only=True,
         ) or []
 
         stats["fetched"] += len(results)
@@ -1159,14 +796,6 @@ def collect_sources(
                 stats["not_article"] += 1
                 continue
 
-            if not relevant_to_topic(
-                document_title,
-                title,
-                abstract,
-            ):
-                stats["off_topic"] += 1
-                continue
-
             if is_self_match(
                 item,
                 document_title,
@@ -1209,7 +838,6 @@ def collect_sources(
                 "no_abstract",
                 "no_doi",
                 "not_article",
-                "off_topic",
                 "self_match",
                 "duplicate",
             )
@@ -1217,7 +845,7 @@ def collect_sources(
     )
 
     print(
-        "[OpenAlex] Lolos filter topik:",
+        "[OpenAlex] Lolos seleksi metadata:",
         len(sources),
     )
 
@@ -1261,6 +889,74 @@ def empty_results(chunks, diagnostic_code="", diagnostic_message=""):
 # ==================================================
 # 12. PIPELINE UTAMA
 # ==================================================
+
+def audit_similarity_evidence(document_text, source_text):
+    """
+    Audit pendukung untuk pasangan yang lolos Academic V2.
+
+    Tidak menentukan matched True/False.
+    Tidak mengubah skor model atau similarity index.
+    """
+
+    def words(text):
+        text = unicodedata.normalize(
+            "NFKC", str(text or "")
+        ).casefold()
+
+        return re.findall(
+            r"[^\W_]+",
+            text,
+            flags=re.UNICODE,
+        )
+
+    document_words = words(document_text)
+    source_words = words(source_text)
+
+    document_terms = {
+        word for word in document_words
+        if len(word) >= 4
+    }
+
+    source_terms = {
+        word for word in source_words
+        if len(word) >= 4
+    }
+
+    shared_terms = document_terms & source_terms
+
+    # Frasa identik tiga kata atau lebih.
+    def trigrams(tokens):
+        return {
+            tuple(tokens[index:index + 3])
+            for index in range(len(tokens) - 2)
+        }
+
+    shared_trigrams = (
+        trigrams(document_words)
+        & trigrams(source_words)
+    )
+
+    # Ukuran diagnostik, bukan skor plagiarisme.
+    denominator = max(
+        1,
+        min(len(document_terms), len(source_terms)),
+    )
+
+    lexical_coverage = (
+        len(shared_terms) / denominator
+    )
+
+    return {
+        "shared_word_count": len(shared_terms),
+        "lexical_coverage": round(
+            lexical_coverage, 4
+        ),
+        "shared_phrases": [
+            " ".join(phrase)
+            for phrase in sorted(shared_trigrams)[:5]
+        ],
+        "review_suggested": not bool(shared_trigrams),
+    }
 
 def analyze_with_openalex(
     document_text,
@@ -1460,12 +1156,137 @@ def analyze_with_openalex(
         ordered_indices[:MAX_CANDIDATES]
     )
 
+    # ==================================================
+    # PENGAMBILAN FULL TEXT SETELAH RANKING BGE-M3
+    # ==================================================
+
+    print()
+    print("[FullText] Memulai pengambilan PDF jurnal")
+    print("[FullText] Kandidat diurutkan berdasarkan relevansi")
+
+    fulltext_attempted = 0
+    fulltext_success = 0
+
+    for source_index in ordered_indices:
+
+        if fulltext_attempted >= MAX_FULLTEXT_PDF_ATTEMPTS:
+            break
+
+        source = literature[source_index]
+
+        # Hanya proses jurnal yang memiliki URL PDF
+        # open access yang valid.
+        pdf_urls = get_open_access_pdf_urls(source)
+
+        if not pdf_urls:
+            continue
+
+        fulltext_attempted += 1
+
+        print(
+            "[FullText] Mencoba jurnal:",
+            source.get("title"),
+        )
+
+        # Ambil teks lengkap dari PDF.
+        # Jika gagal, abstrak tetap digunakan.
+        upgrade_source_to_fulltext(source)
+
+        if source.get("text_scope") == "full_text":
+            fulltext_success += 1
+
+            print(
+                "[FullText] Ekstraksi berhasil:",
+                source.get("title"),
+            )
+
+            print(
+                "[FullText] Jumlah halaman:",
+                source.get("fulltext_pages"),
+            )
+
+        else:
+            print(
+                "[FullText] Menggunakan abstrak:",
+                source.get("title"),
+            )
+
+    print()
+    print(
+        "[FullText] Total percobaan:",
+        fulltext_attempted,
+    )
+
+    print(
+        "[FullText] Ekstraksi berhasil:",
+        fulltext_success,
+    )
+
+    # ==================================================
+    # MEMBANGUN ULANG POTONGAN TEKS SUMBER
+    # ==================================================
+
+    if fulltext_success > 0:
+
+        print(
+            "[FullText] Memproses ulang teks sumber..."
+        )
+
+        source_passages = []
+        passage_source_indices = []
+
+        for source_index, source in enumerate(literature):
+
+            passages = split_short_passages(
+                source.get("text", "")
+            )
+
+            for passage in passages:
+                source_passages.append(passage)
+                passage_source_indices.append(source_index)
+
+        if not source_passages:
+            return empty_results(chunks)
+
+        print(
+            "[FullText] Total potongan teks:",
+            len(source_passages),
+        )
+
+        # Hitung ulang embedding karena sebagian sumber
+        # sekarang berisi teks lengkap jurnal.
+        source_embeddings = embedding_model.encode(
+            source_passages,
+            batch_size=BATCH_SIZE,
+            convert_to_tensor=True,
+            show_progress_bar=False,
+        )
+
+        # Bandingkan potongan dokumen dengan teks
+        # sumber terbaru menggunakan BGE-M3.
+        similarity_matrix = util.cos_sim(
+            chunk_embeddings,
+            source_embeddings,
+        )
+
+        print(
+            "[FullText] Perbandingan semantik selesai"
+        )
+
+    print(
+        "[CrossEncoder] Memulai validasi pasangan teks..."
+    )
+
+    # ==================================================
+    # LANJUT KE VALIDASI ACADEMIC CROSSENCODER V2
+    # ==================================================
+
     print(
         "[BGE-M3] Kandidat diperiksa:",
         len(selected_sources),
     )
 
-    # G. PILIH PASANGAN + VALIDASI KONSEP
+    # G. PILIH PASANGAN BGE-M3 UNTUK ACADEMIC V2
 
     pairs = []
     locations = []
@@ -1633,7 +1454,7 @@ def analyze_with_openalex(
     if not pairs:
         print(
             "[Diagnostic] Tidak ada pasangan "
-            "yang lolos validasi konsep."
+            "yang lolos seleksi BGE-M3."
         )
         return empty_results(chunks)
 
@@ -1725,6 +1546,27 @@ def analyze_with_openalex(
 
         source = literature[source_index]
 
+        
+        # Audit bukti: tidak mengubah hasil matching.
+        evidence_audit = audit_similarity_evidence(
+            chunks[chunk_index],
+            source_text,
+        )
+
+        if passed_v2 <= 20:
+            print(
+                "[EvidenceAudit]",
+                f"segmen={chunk_index + 1}",
+                f"BGE={embedding_score:.4f}",
+                f"AcademicV2={cross_score:.4f}",
+                f"kata_bersama={evidence_audit['shared_word_count']}",
+                f"cakupan_leksikal={evidence_audit['lexical_coverage']}",
+                f"frasa_sama={evidence_audit['shared_phrases']}",
+                f"perlu_review={evidence_audit['review_suggested']}",
+                f"sumber={str(source.get('title') or '')[:65]}",
+            )
+
+
         matches_by_chunk[
             chunk_index
         ].append({
@@ -1751,6 +1593,20 @@ def analyze_with_openalex(
             # Bukti pasangan persis yang
             # diterima Cross Encoder.
             "source_excerpt": source_text,
+
+            # Asal teks bukti untuk laporan.
+            "text_scope": source.get(
+                "text_scope", "abstract"
+            ),
+            "fulltext_status": source.get(
+                "fulltext_status", "abstract_only"
+            ),
+            "fulltext_url": source.get(
+                "fulltext_url"
+            ),
+            "fulltext_pages": source.get(
+                "fulltext_pages", 0
+            ),
 
             # Bukti pendukung untuk audit.
             "evidence_concepts": (
