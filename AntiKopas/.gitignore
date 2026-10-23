@@ -3,6 +3,10 @@
 # ANTIKOPAS - GIT IGNORE
 # =====================================
 
+/.vscode/
+/antikopas-admin-ui-*.zip
+/AntiKopas_Admin_UI_*.zip
+
 # Python cache
 __pycache__/
 *.py[cod]
@@ -45,3 +49,7 @@ Thumbs.db
 # Editor
 .vscode/
 .idea/
+
+# File ZIP revisi AntiKopas
+/antikopas-admin-ui-*.zip
+/AntiKopas_Admin_UI_*.zip
