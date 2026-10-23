@@ -49,22 +49,69 @@ function authHeaders() {
 }
 
 export const api = {
-  login: (username, password) => request('/auth/token/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password }) }),
-  register: (username, password, passwordConfirm) => request('/auth/register/', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username, password, password_confirm: passwordConfirm }) }),
+  getCurrentUser: () => request('/auth/me/', {
+    headers: authHeaders(),
+  }),
+
+  login: (username, password) => request('/auth/token/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  }),
+
+  register: (username, password, passwordConfirm) => request('/auth/register/', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username,
+      password,
+      password_confirm: passwordConfirm,
+    }),
+  }),
+
   listAnalyses: ({ page = 1, pageSize = 10, query = '', status = '' } = {}) => {
-    const params = new URLSearchParams({ page: String(page), page_size: String(pageSize) })
+    const params = new URLSearchParams({
+      page: String(page),
+      page_size: String(pageSize),
+    })
+
     if (query) params.set('q', query)
     if (status) params.set('status', status)
-    return request(`/analyses/?${params.toString()}`, { headers: authHeaders() })
+
+    return request(`/analyses/?${params.toString()}`, {
+      headers: authHeaders(),
+    })
   },
-  getStats: () => request('/analyses/stats/', { headers: authHeaders() }),
-  updateAnalysis: (id, title) => request(`/analyses/${id}/`, { method: 'PATCH', headers: { ...authHeaders(), 'Content-Type': 'application/json' }, body: JSON.stringify({ title }) }),
-  deleteAnalysis: (id) => request(`/analyses/${id}/`, { method: 'DELETE', headers: authHeaders() }),
+
+  getStats: () => request('/analyses/stats/', {
+    headers: authHeaders(),
+  }),
+
+  updateAnalysis: (id, title) => request(`/analyses/${id}/`, {
+    method: 'PATCH',
+    headers: {
+      ...authHeaders(),
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ title }),
+  }),
+
+  deleteAnalysis: (id) => request(`/analyses/${id}/`, {
+    method: 'DELETE',
+    headers: authHeaders(),
+  }),
+
   getReport: (url) => downloadReport(url),
+
   detect: (title, file) => {
     const body = new FormData()
     body.append('title', title)
     body.append('file', file)
-    return request('/detect/', { method: 'POST', headers: authHeaders(), body })
+
+    return request('/detect/', {
+      method: 'POST',
+      headers: authHeaders(),
+      body,
+    })
   },
 }

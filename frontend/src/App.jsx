@@ -10,6 +10,8 @@ import './App.css'
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('antikopas_access'))
+  const [currentUser, setCurrentUser] = useState(null)
+  const [identityError, setIdentityError] = useState('')
   const [showLogin, setShowLogin] = useState(false)
   const [showRegister, setShowRegister] = useState(false)
   const [login, setLogin] = useState({ username: '', password: '' })
@@ -363,9 +365,13 @@ function App() {
       dialog.close()
 
       setToken(null)
+      setCurrentUser(null)
+      setIdentityError('')
       setShowLogin(true)
       setShowRegister(false)
       setResult(null)
+      setAnalyses([])
+      setStats(null)
       setMessage('')
     })
 
@@ -397,22 +403,54 @@ function App() {
     }
   }, [])
 
+  // Periksa identitas pengguna melalui API setelah login atau saat sesi dipulihkan.
   useEffect(() => {
     if (!token) return
+
+    let cancelled = false
+
+    async function loadCurrentUser() {
+      try {
+        const data = await api.getCurrentUser()
+        if (!data.user || !['user', 'admin'].includes(data.user.role)) {
+          throw new Error('Role akun tidak dikenali.')
+        }
+        if (!cancelled) {
+          setCurrentUser(data.user)
+          setIdentityError('')
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setCurrentUser(null)
+          setIdentityError(error.message)
+          setMessage(error.message)
+        }
+      }
+    }
+
+    loadCurrentUser()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  useEffect(() => {
+    if (!token || currentUser?.role !== 'user') return
     const initialLoad = window.setTimeout(() => {
       loadAnalyses()
       loadStats()
     }, 0)
     return () => window.clearTimeout(initialLoad)
-  }, [token, loadAnalyses, loadStats])
+  }, [token, currentUser?.role, loadAnalyses, loadStats])
 
   useEffect(() => {
-    if (!token) return undefined
+    if (!token || currentUser?.role !== 'user') return undefined
     const timer = window.setInterval(() => {
       if (analyses.some((item) => item.status === 'pending' || item.status === 'processing')) loadAnalyses()
     }, 3000)
     return () => window.clearInterval(timer)
-  }, [token, analyses, loadAnalyses])
+  }, [token, currentUser?.role, analyses, loadAnalyses])
 
   async function handleLogin(event) {
     event.preventDefault()
@@ -422,6 +460,8 @@ function App() {
       const data = await api.login(login.username, login.password)
       localStorage.setItem('antikopas_access', data.access)
       localStorage.setItem('antikopas_refresh', data.refresh)
+      setCurrentUser(null)
+      setIdentityError('')
       setToken(data.access)
     } catch (error) {
       setMessage(error.message)
@@ -520,8 +560,13 @@ function App() {
   function logout() {
     localStorage.removeItem('antikopas_access')
     localStorage.removeItem('antikopas_refresh')
+    setCurrentUser(null)
+    setIdentityError('')
     setToken(null)
     setResult(null)
+    setAnalyses([])
+    setStats(null)
+    setMessage('')
   }
 
   if (!token && !showLogin) {
@@ -561,11 +606,73 @@ function App() {
     )
   }
 
+  // Jangan tampilkan dashboard apa pun sebelum role berhasil diverifikasi.
+  if (!currentUser) {
+    return (
+      <main className="auth-shell" style={{ display: 'grid', gridTemplateColumns: '1fr', placeItems: 'center' }}>
+        <section className="auth-card" style={{ width: 'min(540px, calc(100% - 32px))' }} aria-live="polite">
+          <div className="auth-brand"><img className="brand-image auth-logo" src={logo} alt="Logo AntiKopas" /><span>Anti<span>Kopas</span></span></div>
+          <h1>{identityError ? 'Verifikasi akun gagal' : 'Memeriksa akun...'}</h1>
+          <p className="muted">{identityError ? 'Identitas akun belum berhasil diverifikasi. Coba lagi atau masuk kembali.' : 'Mohon tunggu, kami sedang memeriksa hak akses akun Anda.'}</p>
+          {identityError && (
+            <>
+              <p className="notice error">{identityError}</p>
+              <button className="auth-submit" onClick={() => window.location.reload()}>Coba lagi</button>
+              <button className="auth-switch" onClick={logout}>Keluar</button>
+            </>
+          )}
+        </section>
+      </main>
+    )
+  }
+
+  // Administrator menggunakan dashboard pengelolaan, bukan workspace analisis user.
+  if (currentUser.role === 'admin') {
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
+    const adminUrl = new URL('/admin/', new URL(apiUrl, window.location.origin)).href
+
+    return (
+      <main className="dashboard-reference">
+        <nav className="dashboard-reference-nav">
+          <div className="dashboard-reference-actions">
+            <span className="dashboard-reference-avatar" aria-label={`Akun ${currentUser.username}`}>{currentUser.username.charAt(0).toUpperCase()}</span>
+            <button className="dashboard-reference-logout" onClick={logout}><LineIcon type="logout" /> Keluar</button>
+          </div>
+        </nav>
+
+        <section className="dashboard-reference-main">
+          <div className="dashboard-reference-intro">
+            <span>AREA ADMINISTRATOR</span>
+            <h1>Dashboard Pengelolaan AntiKopas</h1>
+            <p>Selamat datang, {currentUser.username}. Kelola pengguna, dokumen, hasil analisis, dan laporan melalui panel administrator.</p>
+          </div>
+          <div className="dashboard-reference-grid">
+            <section className="dashboard-reference-card">
+              <div className="dashboard-reference-card-heading"><h2>Panel administrator</h2><LineIcon type="lock" /></div>
+              <p className="muted">Buka Django Admin untuk mengelola data AntiKopas sesuai hak akses akun.</p>
+              <a href={adminUrl} target="_blank" rel="noopener noreferrer" className="hero-button" style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none', marginTop: '16px' }}>
+                Buka panel administrator <span aria-hidden="true">↗</span>
+              </a>
+              <p className="muted" style={{ marginTop: '16px' }}>Django Admin menggunakan sesi login sendiri. Jika diminta, masuk kembali menggunakan akun administrator.</p>
+            </section>
+            <section className="dashboard-reference-card">
+              <div className="dashboard-reference-card-heading"><h2>Identitas akun</h2><LineIcon type="lock" /></div>
+              <p><strong>Username:</strong> {currentUser.username}</p>
+              <p><strong>Role:</strong> Administrator</p>
+              <p><strong>Hak akses:</strong> {currentUser.is_superuser ? 'Superuser' : 'Staff'}</p>
+              <p className="muted">Hak akses sebenarnya tetap ditentukan dan diperiksa oleh backend Django.</p>
+            </section>
+          </div>
+        </section>
+      </main>
+    )
+  }
+
   return (
     <main className="dashboard-reference">
       <nav className="dashboard-reference-nav">
         <div className="dashboard-reference-actions">
-          <span className="dashboard-reference-avatar">S</span>
+          <span className="dashboard-reference-avatar" aria-label={`Akun ${currentUser.username}`}>{currentUser.username.charAt(0).toUpperCase()}</span>
           <button className="dashboard-reference-logout" onClick={logout}><LineIcon type="logout" /> Keluar</button>
         </div>
       </nav>
