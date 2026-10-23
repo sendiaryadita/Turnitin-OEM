@@ -1,0 +1,70 @@
+{% extends "admin/base.html" %}
+
+{% block extrastyle %}
+{{ block.super }}
+
+<style>
+    /* =====================================
+       ANTIKOPAS ADMIN - BRAND COLORS
+       ===================================== */
+
+    html[data-theme="light"], :root {
+        --primary: #28234F;
+        --secondary: #28234F;
+        --accent: #F56855;
+        --primary-fg: #FFFFFF;
+
+        --header-bg: #28234F;
+        --header-color: #FFFFFF;
+        --header-link-color: #FFFFFF;
+        --header-branding-color: #F56855;
+
+        --body-bg: #FAF9F7;
+        --body-fg: #28234F;
+        --darkened-bg: #F4F2F8;
+        --selected-bg: #FFF0EC;
+
+        --link-fg: #514675;
+        --link-hover-color: #F56855;
+        --link-selected-fg: #E85845;
+
+        --button-bg: #28234F;
+        --button-hover-bg: #433967;
+
+        --default-button-bg: #F56855;
+        --default-button-hover-bg: #E85845;
+    }
+
+    /* Header */
+    #header {
+        box-shadow: 0 3px 14px rgba(40, 35, 79, 0.12);
+    }
+
+    /* Identitas AntiKopas */
+    #branding h1,
+    #branding h1 a {
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+
+    /* Judul dashboard */
+    #content h1 {
+        font-weight: 700;
+        letter-spacing: -0.4px;
+    }
+
+    /* Kartu dan tabel */
+    .module {
+        border-radius: 10px;
+        overflow: hidden;
+    }
+
+    /* Tombol */
+    .button,
+    input[type="submit"],
+    input[type="button"] {
+        border-radius: 7px;
+    }
+</style>
+
+{% endblock %}
