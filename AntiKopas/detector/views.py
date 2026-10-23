@@ -6,6 +6,8 @@ import zipfile
 from datetime import datetime
 from pathlib import Path
 
+from django.utils import timezone
+
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
 from django.core.exceptions import ValidationError
@@ -81,6 +83,25 @@ def register_user(request):
         "username": user.username,
     }, status=201)
 
+# ==========================================
+# IDENTITAS PENGGUNA YANG SEDANG LOGIN
+# ==========================================
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def current_user(request):
+    user = request.user
+
+    return Response({
+        "status": "success",
+        "user": {
+            "id": user.id,
+            "username": user.username,
+            "role": "admin" if user.is_staff else "user",
+            "is_staff": user.is_staff,
+            "is_superuser": user.is_superuser,
+        }
+    })
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -431,15 +452,20 @@ def detect_similarity(request):
         []
     )
 
-    # Simpan hasil analisis ke database.
+    # Simpan hasil analisis sementara.
+    # Status tetap PROCESSING sampai laporan PDF berhasil disimpan.
     analysis_job.total_chunks = total_chunks
     analysis_job.matched_chunks = matched_chunks
     analysis_job.similarity_index = float(similarity_index or 0)
-    analysis_job.status = AnalysisJob.Status.COMPLETED
-    analysis_job.completed_at = datetime.now()
+    analysis_job.status = AnalysisJob.Status.PROCESSING
+    analysis_job.completed_at = None
+
     analysis_job.save(update_fields=[
-        "total_chunks", "matched_chunks", "similarity_index",
-        "status", "completed_at"
+        "total_chunks",
+        "matched_chunks",
+        "similarity_index",
+        "status",
+        "completed_at",
     ])
 
     source_cache = {}
@@ -646,6 +672,16 @@ def detect_similarity(request):
             analysis=analysis_job,
             defaults={"file": File(report_file, name=report_filename)},
         )
+
+    # Analisis dinyatakan selesai setelah laporan PDF tersimpan.
+    # Waktu ini akan menjadi acuan masa simpan dokumen 2 jam.
+    analysis_job.status = AnalysisJob.Status.COMPLETED
+    analysis_job.completed_at = timezone.now()
+
+    analysis_job.save(update_fields=[
+        "status",
+        "completed_at",
+    ])
 
     # --------------------------------------
     # K. REPORT URL

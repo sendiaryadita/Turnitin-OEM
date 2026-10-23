@@ -1,6 +1,7 @@
 from django.contrib.auth.models import User
 from django.db import models
-
+from datetime import timedelta
+from django.utils import timezone
 
 class Document(models.Model):
     """Dokumen akademik yang dikirim untuk dianalisis."""
@@ -70,6 +71,33 @@ class AnalysisJob(models.Model):
 
     def __str__(self):
         return f"Analysis #{self.pk} - {self.document.title}"
+
+        # ==========================================
+    # MASA SIMPAN HASIL ANALISIS: 2 JAM
+    # ==========================================
+
+    @property
+    def expires_at(self):
+        """
+        Menghitung waktu kedaluwarsa berdasarkan
+        waktu selesainya analisis.
+        """
+        if self.completed_at is None:
+            return None
+
+        return self.completed_at + timedelta(hours=2)
+
+    @property
+    def is_expired(self):
+        """
+        Memeriksa apakah masa simpan sudah berakhir.
+        """
+        expiration = self.expires_at
+
+        if expiration is None:
+            return False
+
+        return timezone.now() >= expiration
 
 
 class DocumentChunk(models.Model):
