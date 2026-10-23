@@ -1,0 +1,31 @@
+{% extends "admin/change_list.html" %}
+
+{% block result_list %}
+    {% if cl.result_count == 0 %}
+    <div class="ak-admin-empty" role="status">
+        <span class="ak-admin-empty-icon" aria-hidden="true">
+            <svg width="29" height="29" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="1.8"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <rect x="4" y="3" width="16" height="18" rx="2"></rect>
+                <path d="M8 8h8M8 12h8M8 16h5"></path>
+            </svg>
+        </span>
+        {% if cl.query or cl.has_active_filters %}
+            <h3>Tidak ada hasil yang sesuai</h3>
+            <p>Coba ubah kata pencarian atau pilihan filter.</p>
+        {% else %}
+            <h3>Belum ada data</h3>
+            <p>Data akan ditampilkan di sini setelah ditambahkan atau diproses.</p>
+        {% endif %}
+    </div>
+    {% else %}
+        {{ block.super }}
+    {% endif %}
+{% endblock %}
+
+{% block pagination %}
+    {% if cl.result_count %}
+        {{ block.super }}
+    {% endif %}
+{% endblock %}
