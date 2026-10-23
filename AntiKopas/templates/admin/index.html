@@ -1,0 +1,382 @@
+{% extends "admin/base_site.html" %}
+{% load static l10n antikopas_dashboard %}
+
+
+{% block title %}Ringkasan Pengelolaan | AntiKopas{% endblock %}
+
+{% block bodyclass %}
+{{ block.super }} antikopas-dashboard-page
+{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<link rel="stylesheet" href="{% static 'detector/antikopas_dashboard.css' %}">
+{% endblock %}
+
+{% block breadcrumbs %}{% endblock %}
+{% block content_title %}{% endblock %}
+{% block nav-sidebar %}{% endblock %}
+
+{% block content %}
+{% antikopas_dashboard_data as dashboard %}
+
+<div class="ak-dashboard">
+
+    <aside class="ak-sidebar" aria-label="Navigasi administrator">
+
+        <div class="ak-sidebar-heading">MENU UTAMA</div>
+
+        <nav class="ak-navigation">
+
+            <a href="{% url 'admin:index' %}"
+               class="ak-nav-item active"
+               aria-current="page">
+                <span class="ak-nav-icon">⌂</span>
+                <span>Ringkasan</span>
+            </a>
+
+            <a href="{% url 'admin:auth_user_changelist' %}"
+               class="ak-nav-item">
+                <span class="ak-nav-icon">♙</span>
+                <span>Pengguna</span>
+            </a>
+
+            <a href="{% url 'admin:detector_document_changelist' %}"
+               class="ak-nav-item">
+                <span class="ak-nav-icon">▤</span>
+                <span>Dokumen</span>
+            </a>
+
+            <a href="{% url 'admin:detector_analysisjob_changelist' %}"
+               class="ak-nav-item">
+                <span class="ak-nav-icon">⌕</span>
+                <span>Analisis</span>
+            </a>
+
+            <a href="{% url 'admin:detector_report_changelist' %}"
+               class="ak-nav-item">
+                <span class="ak-nav-icon">▥</span>
+                <span>Laporan</span>
+            </a>
+
+            <a href="{% url 'admin:auth_group_changelist' %}"
+               class="ak-nav-item">
+                <span class="ak-nav-icon">⚙</span>
+                <span>Grup &amp; Akses</span>
+            </a>
+
+        </nav>
+
+        <div class="ak-sidebar-bottom">
+            <span class="ak-status-dot"></span>
+            AntiKopas Administrator
+        </div>
+
+    </aside>
+
+    <section class="ak-main">
+
+        <div class="ak-page-heading">
+
+            <div>
+                <p class="ak-eyebrow">AREA ADMINISTRATOR</p>
+                <h1>Ringkasan Pengelolaan</h1>
+                <p class="ak-page-description">
+                    Aktivitas dan statistik sistem AntiKopas.
+                </p>
+            </div>
+
+            <a href="{{ site_url|default:'/' }}"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="ak-website-button">
+                ↗ Lihat Website
+            </a>
+
+        </div>
+
+        <div class="ak-stat-grid">
+
+            <article class="ak-stat-card">
+                <div class="ak-stat-icon ak-purple">♙</div>
+
+                <div>
+                    <p>Total Pengguna</p>
+                    <h2>{{ dashboard.total_users }}</h2>
+                    <small>Akun terdaftar</small>
+                </div>
+            </article>
+
+            <article class="ak-stat-card">
+                <div class="ak-stat-icon ak-blue">▤</div>
+
+                <div>
+                    <p>Dokumen</p>
+                    <h2>{{ dashboard.total_documents }}</h2>
+                    <small>Dokumen tercatat</small>
+                </div>
+            </article>
+
+            <article class="ak-stat-card">
+                <div class="ak-stat-icon ak-green">✓</div>
+
+                <div>
+                    <p>Analisis Selesai</p>
+                    <h2>{{ dashboard.completed_analyses }}</h2>
+                    <small>Berhasil diproses</small>
+                </div>
+            </article>
+
+            <article class="ak-stat-card">
+                <div class="ak-stat-icon ak-red">×</div>
+
+                <div>
+                    <p>Analisis Gagal</p>
+                    <h2>{{ dashboard.failed_analyses }}</h2>
+                    <small>Proses tidak berhasil</small>
+                </div>
+            </article>
+
+        </div>
+
+        <div class="ak-content-grid">
+
+            <section class="ak-panel ak-chart-panel">
+
+                <div class="ak-panel-heading">
+                    <h2>Aktivitas Analisis</h2>
+                    <span class="ak-period">30 Hari Terakhir</span>
+                </div>
+
+                <div class="ak-chart-legend">
+                    <span>
+                        <i class="ak-legend-dot ak-completed-dot"></i>
+                        Analisis Selesai
+                    </span>
+
+                    <span>
+                        <i class="ak-legend-dot ak-failed-dot"></i>
+                        Analisis Gagal
+                    </span>
+                </div>
+
+                {% if dashboard.total_analyses == 0 %}
+                <p class="ak-empty-chart">
+                    Belum ada aktivitas analisis yang tercatat.
+                </p>
+                {% else %}
+                <div class="ak-chart-scroll" tabindex="0"
+                     aria-label="Grafik aktivitas analisis 30 hari terakhir">
+
+                    <svg class="ak-chart-svg"
+                         viewBox="0 0 720 220"
+                         role="img"
+                         aria-label="Grafik jumlah analisis selesai dan gagal">
+
+                        <line x1="10" y1="40" x2="710" y2="40"
+                              class="ak-chart-gridline"></line>
+
+                        <line x1="10" y1="75" x2="710" y2="75"
+                              class="ak-chart-gridline"></line>
+
+                        <line x1="10" y1="110" x2="710" y2="110"
+                              class="ak-chart-gridline"></line>
+
+                        <line x1="10" y1="145" x2="710" y2="145"
+                              class="ak-chart-gridline"></line>
+
+                        <line x1="10" y1="180" x2="710" y2="180"
+                              class="ak-chart-gridline"></line>
+
+                        {% for item in dashboard.chart %}
+
+                        <rect
+                            x="{{ item.x }}"
+                            y="{{ item.completed_y|unlocalize }}"
+                            width="7"
+                            height="{{ item.completed_height|unlocalize }}"
+                            class="ak-chart-bar-completed">
+                            <title>
+                                {{ item.date|date:"d M Y" }}:
+                                {{ item.completed }} selesai
+                            </title>
+                        </rect>
+
+                        <rect
+                            x="{{ item.failed_x }}"
+                            y="{{ item.failed_y|unlocalize }}"
+                            width="7"
+                            height="{{ item.failed_height|unlocalize }}"
+                            class="ak-chart-bar-failed">
+                            <title>
+                                {{ item.date|date:"d M Y" }}:
+                                {{ item.failed }} gagal
+                            </title>
+                        </rect>
+
+                        {% if item.label %}
+                        <text x="{{ item.label_x }}"
+                              y="205"
+                              text-anchor="middle"
+                              class="ak-chart-label">
+                            {{ item.label }}
+                        </text>
+                        {% endif %}
+
+                        {% endfor %}
+
+                        <polyline
+                            points="{{ dashboard.line_points }}"
+                            class="ak-chart-line">
+                        </polyline>
+
+                    </svg>
+
+                </div>
+                {% endif %}
+
+            </section>
+
+            <section class="ak-panel ak-storage-panel">
+
+                <div class="ak-storage-heading">
+                    <div class="ak-storage-icon">▣</div>
+
+                    <div>
+                        <h2>Penyimpanan Dokumen</h2>
+                        <p>Informasi dokumen yang tercatat di sistem.</p>
+                    </div>
+                </div>
+
+                <div class="ak-storage-info">
+
+                    <div class="ak-storage-number">
+                        {{ dashboard.document_size_mb }} MB
+                    </div>
+
+                    <p>Ukuran total dokumen yang tercatat.</p>
+
+                </div>
+
+            </section>
+
+        </div>
+
+        <section class="ak-panel ak-recent-panel">
+
+            <div class="ak-panel-heading">
+
+                <h2>Analisis Terbaru</h2>
+
+                <a href="{% url 'admin:detector_analysisjob_changelist' %}"
+                   class="ak-view-all">
+                    Lihat Semua →
+                </a>
+
+            </div>
+
+            <div class="ak-table-container" tabindex="0">
+
+                <table class="ak-table">
+
+                    <thead>
+                        <tr>
+                            <th>No.</th>
+                            <th>Nama Dokumen</th>
+                            <th>Pengguna</th>
+                            <th>Tanggal Analisis</th>
+                            <th>Hasil</th>
+                            <th>Status</th>
+                            <th>Aksi</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+
+                        {% for job in dashboard.recent_analyses %}
+
+                        <tr>
+
+                            <td>{{ forloop.counter }}</td>
+
+                            <td class="ak-document-title">
+                                {{ job.document.title }}
+                            </td>
+
+                            <td>
+                                {{ job.document.uploaded_by.username|default:"-" }}
+                            </td>
+
+                            <td>
+                                {{ job.created_at|date:"d M Y, H:i" }}
+                            </td>
+
+                            <td>
+                                <span class="ak-similarity">
+                                    {{ job.similarity_index|floatformat:2 }}%
+                                </span>
+                            </td>
+
+                            <td>
+
+                                {% if job.status == "completed" %}
+                                <span class="ak-badge ak-badge-success">
+                                    Selesai
+                                </span>
+
+                                {% elif job.status == "failed" %}
+                                <span class="ak-badge ak-badge-danger">
+                                    Gagal
+                                </span>
+
+                                {% elif job.status == "processing" %}
+                                <span class="ak-badge ak-badge-warning">
+                                    Diproses
+                                </span>
+
+                                {% else %}
+                                <span class="ak-badge ak-badge-neutral">
+                                    Menunggu
+                                </span>
+                                {% endif %}
+
+                            </td>
+
+                            <td>
+                                <a
+                                    href="{% url 'admin:detector_analysisjob_change' job.id %}"
+                                    class="ak-detail-link">
+                                    Detail
+                                </a>
+                            </td>
+
+                        </tr>
+
+                        {% empty %}
+
+                        <tr>
+                            <td colspan="7" class="ak-table-empty">
+                                Belum ada analisis yang tersimpan.
+                            </td>
+                        </tr>
+
+                        {% endfor %}
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </section>
+
+        <p class="ak-dashboard-footer">
+            Total {{ dashboard.total_analyses }} analisis tercatat,
+            {{ dashboard.processing_analyses }} masih menunggu atau diproses.
+        </p>
+
+    </section>
+
+</div>
+
+{% endblock %}
