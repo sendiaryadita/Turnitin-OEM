@@ -2,69 +2,340 @@
 
 {% block extrastyle %}
 {{ block.super }}
-
 <style>
-    /* =====================================
-       ANTIKOPAS ADMIN - BRAND COLORS
-       ===================================== */
-
-    html[data-theme="light"], :root {
-        --primary: #28234F;
-        --secondary: #28234F;
-        --accent: #F56855;
-        --primary-fg: #FFFFFF;
-
-        --header-bg: #28234F;
-        --header-color: #FFFFFF;
-        --header-link-color: #FFFFFF;
-        --header-branding-color: #F56855;
-
-        --body-bg: #FAF9F7;
-        --body-fg: #28234F;
-        --darkened-bg: #F4F2F8;
-        --selected-bg: #FFF0EC;
-
-        --link-fg: #514675;
-        --link-hover-color: #F56855;
-        --link-selected-fg: #E85845;
-
-        --button-bg: #28234F;
-        --button-hover-bg: #433967;
-
-        --default-button-bg: #F56855;
-        --default-button-hover-bg: #E85845;
+    /*
+     * AntiKopas Admin: satu sumber warna untuk halaman bawaan Django.
+     * Variabel mengikuti theme.js Django: light, dark, dan auto.
+     */
+    :root,
+    html[data-theme="light"] {
+        --primary: #302952;
+        --secondary: #302952;
+        --accent: #f56855;
+        --primary-fg: #ffffff;
+        --header-bg: #28234f;
+        --header-color: #ffffff;
+        --header-link-color: #f7f6ff;
+        --header-branding-color: #ff856e;
+        --body-bg: #f7f8fc;
+        --body-fg: #28234f;
+        --darkened-bg: #eff0f8;
+        --selected-bg: #ece9fb;
+        --hairline-color: #e3e6f0;
+        --border-color: #dfe2ef;
+        --link-fg: #504c9e;
+        --link-hover-color: #dc5344;
+        --link-selected-fg: #413a8d;
+        --breadcrumbs-bg: #3b315f;
+        --breadcrumbs-fg: #ffffff;
+        --button-bg: #403568;
+        --button-hover-bg: #302952;
+        --default-button-bg: #ec6754;
+        --default-button-hover-bg: #d85545;
     }
 
-    /* Header */
+    html[data-theme="dark"] {
+        --primary: #302952;
+        --secondary: #302952;
+        --accent: #ff947c;
+        --primary-fg: #ffffff;
+        --header-bg: #28234f;
+        --header-color: #ffffff;
+        --header-link-color: #f7f6ff;
+        --header-branding-color: #ff947c;
+        --body-bg: #171a2d;
+        --body-fg: #eef0ff;
+        --darkened-bg: #242840;
+        --selected-bg: #373453;
+        --hairline-color: #383e5c;
+        --border-color: #424764;
+        --link-fg: #c5bfff;
+        --link-hover-color: #ffab99;
+        --link-selected-fg: #e1dcff;
+        --breadcrumbs-bg: #37305c;
+        --breadcrumbs-fg: #ffffff;
+        --button-bg: #514776;
+        --button-hover-bg: #62558c;
+        --default-button-bg: #e46b5b;
+        --default-button-hover-bg: #f2806c;
+    }
+
+    @media (prefers-color-scheme: dark) {
+        html[data-theme="auto"] {
+            --primary: #302952;
+            --secondary: #302952;
+            --accent: #ff947c;
+            --primary-fg: #ffffff;
+            --header-bg: #28234f;
+            --header-color: #ffffff;
+            --header-link-color: #f7f6ff;
+            --header-branding-color: #ff947c;
+            --body-bg: #171a2d;
+            --body-fg: #eef0ff;
+            --darkened-bg: #242840;
+            --selected-bg: #373453;
+            --hairline-color: #383e5c;
+            --border-color: #424764;
+            --link-fg: #c5bfff;
+            --link-hover-color: #ffab99;
+            --link-selected-fg: #e1dcff;
+            --breadcrumbs-bg: #37305c;
+            --breadcrumbs-fg: #ffffff;
+            --button-bg: #514776;
+            --button-hover-bg: #62558c;
+            --default-button-bg: #e46b5b;
+            --default-button-hover-bg: #f2806c;
+        }
+    }
+
     #header {
-        box-shadow: 0 3px 14px rgba(40, 35, 79, 0.12);
+        background: linear-gradient(110deg, #272249, #342954);
+        padding: 11px 22px;
+        box-shadow: 0 4px 20px rgba(18, 14, 50, .16);
     }
 
-    /* Identitas AntiKopas */
-    #branding h1,
-    #branding h1 a {
+    #header #site-name.ak-brand {
+        margin: 0;
+        padding: 0;
+        font-size: 1rem;
         font-weight: 700;
-        letter-spacing: -0.5px;
+        line-height: 1.2;
     }
 
-    /* Judul dashboard */
-    #content h1 {
-        font-weight: 700;
-        letter-spacing: -0.4px;
+    #header #site-name.ak-brand a {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        text-decoration: none;
+        color: #ffffff;
+        width: fit-content;
     }
 
-    /* Kartu dan tabel */
-    .module {
+    .ak-brand-logo {
+        display: block;
+        width: 39px;
+        height: 39px;
+        object-fit: cover;
         border-radius: 10px;
+        background: white;
+        box-shadow: 0 2px 12px rgba(0, 0, 0, .18);
+        transition: transform .35s ease, box-shadow .35s ease;
+    }
+
+    #header .ak-brand a:hover .ak-brand-logo {
+        transform: rotate(-5deg) scale(1.045);
+        box-shadow: 0 5px 16px rgba(245, 104, 85, .25);
+    }
+
+    #header .ak-brand-name {
+        display: inline-flex;
+        align-items: baseline;
+        white-space: nowrap;
+        font-size: 21px;
+        font-weight: 850;
+        letter-spacing: -.65px;
+        animation: ak-brand-appear .6s ease-out both;
+    }
+
+    #header .ak-brand-anti { color: #ffffff; }
+    #header .ak-brand-kopas { color: #ff816f; }
+    #header .ak-brand-role {
+        margin-left: 4px;
+        padding-left: 12px;
+        border-left: 1px solid rgba(255, 255, 255, .35);
+        font-size: 13px;
+        font-weight: 500;
+        color: #cbc7ea;
+        white-space: nowrap;
+    }
+
+    #user-tools a {
+        text-decoration: none;
+        transition: color .2s ease;
+    }
+    #user-tools a:hover { color: #ffab98; }
+
+    #content h1, #content h2 {
+        letter-spacing: -.35px;
+    }
+
+    #content .module,
+    #nav-sidebar .module,
+    #changelist-filter,
+    #changelist-search {
+        border-radius: 11px;
+    }
+
+    #nav-sidebar {
+        background: var(--body-bg);
+        border-right: 1px solid var(--hairline-color);
+    }
+
+    #nav-sidebar .module {
+        margin: 12px;
         overflow: hidden;
     }
 
-    /* Tombol */
+    #nav-sidebar .module caption,
+    #changelist-filter h2 {
+        background: #31294f;
+        color: #ffffff;
+    }
+
+    #nav-sidebar .module a {
+        text-decoration: none;
+        font-weight: 600;
+    }
+    #nav-sidebar .addlink { display: none; }
+
+    /* Active navigation is visible in light and dark themes. */
+    #nav-sidebar .current-model {
+        background: var(--selected-bg);
+        box-shadow: inset 4px 0 #c74c3c;
+    }
+
+    #nav-sidebar .current-model a {
+        color: var(--body-fg);
+        font-weight: 800;
+    }
+
+    /* Model change-list headings: stronger contrast and hierarchy. */
+    #changelist #result_list thead th,
+    #changelist #result_list thead th a,
+    #changelist #result_list thead th span {
+        background-color: var(--darkened-bg);
+        color: var(--body-fg);
+        font-size: 13px;
+        font-weight: 750;
+        line-height: 1.45;
+        letter-spacing: .012em;
+    }
+
+    /* Breadcrumbs and filter targets are easier to read/click. */
+    div.breadcrumbs,
+    div.breadcrumbs a {
+        font-size: 14px;
+        line-height: 1.55;
+    }
+
+    #changelist-filter a,
+    #changelist-filter li,
+    #changelist-filter h3 {
+        font-size: 14px;
+        line-height: 1.5;
+    }
+
+    #changelist-filter li a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 28px;
+        padding: 3px 2px;
+    }
+
+    #content .object-tools a {
+        background: #c74c3c;
+        color: #ffffff;
+        border-radius: 9px;
+        font-size: 13px;
+        font-weight: 800;
+        letter-spacing: .015em;
+        transition: transform .2s ease, background .2s ease;
+    }
+    #content .object-tools a:hover {
+        background: #ad3f32;
+        color: #ffffff;
+        transform: translateY(-2px);
+    }
+
+    /* Real empty state for Django model lists without records. */
+    #changelist .ak-admin-empty {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 9px;
+        min-height: 245px;
+        margin: 16px 0;
+        padding: 28px 20px;
+        background: var(--darkened-bg);
+        border: 1px dashed var(--border-color);
+        border-radius: 14px;
+        color: var(--body-fg);
+        text-align: center;
+    }
+
+    #changelist .ak-admin-empty-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 58px;
+        height: 58px;
+        margin-bottom: 5px;
+        background: var(--selected-bg);
+        color: var(--link-fg);
+        border-radius: 18px;
+    }
+
+    #changelist .ak-admin-empty h3 {
+        margin: 0;
+        color: var(--body-fg);
+        font-size: 18px;
+        font-weight: 800;
+    }
+
+    #changelist .ak-admin-empty p {
+        max-width: 350px;
+        margin: 0;
+        color: var(--body-fg);
+        font-size: 13px;
+        line-height: 1.6;
+    }
+
+    #result_list tbody tr:hover {
+        background: var(--selected-bg);
+    }
+
+    #result_list th,
+    #result_list td {
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
+
+    input[type="text"],
+    input[type="password"],
+    input[type="email"],
+    select, textarea,
     .button,
-    input[type="submit"],
-    input[type="button"] {
-        border-radius: 7px;
+    input[type="submit"] {
+        border-radius: 8px;
+    }
+
+    a:focus-visible, button:focus-visible, input:focus-visible {
+        outline: 2px solid #f56855;
+        outline-offset: 2px;
+    }
+
+    @keyframes ak-brand-appear {
+        from { opacity: 0; transform: translateY(6px); }
+        to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 767px) {
+        #header { padding: 11px 14px; gap: 8px; }
+        #header .ak-brand-name { font-size: 19px; }
+        #header .ak-brand-role { font-size: 11px; }
+        .ak-brand-logo { width: 34px; height: 34px; }
+        #content { min-width: 0; }
+    }
+
+    @media (max-width: 420px) {
+        #header .ak-brand-role { display: none; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+        #header .ak-brand-name { animation: none; }
+        #header .ak-brand-logo,
+        #content .object-tools a { transition: none; }
     }
 </style>
-
 {% endblock %}

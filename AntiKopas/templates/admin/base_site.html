@@ -1,0 +1,18 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+
+{% block branding %}
+<div id="site-name" class="ak-brand">
+    <a href="{% url 'admin:index' %}" aria-label="Beranda administrasi AntiKopas">
+        <img src="{% static 'detector/antikopas-logo.png' %}"
+             class="ak-brand-logo" alt="" width="39" height="39">
+        <span class="ak-brand-name" aria-hidden="true">
+            <span class="ak-brand-anti">Anti</span><span class="ak-brand-kopas">Kopas</span>
+        </span>
+        <span class="ak-brand-role" aria-hidden="true">Administrator</span>
+    </a>
+</div>
+{% if user.is_anonymous %}
+    {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
