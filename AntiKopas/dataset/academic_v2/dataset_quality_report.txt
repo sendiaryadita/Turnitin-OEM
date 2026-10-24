@@ -1,0 +1,84 @@
+LAPORAN PEMERIKSAAN DATASET SINTETIS — AntiKopas academic_similarity_v2
+Tanggal: 2026-10-09
+
+IDENTITAS
+Status: data sintetis orisinal berbasis skenario terstruktur, bukan temuan empiris dan bukan kutipan dari jurnal.
+Pemastian kesetaraan makna menggunakan aturan pembentukan pasangan; belum dilakukan anotasi atau validasi oleh pakar.
+Dataset ini tidak disertai bukti peningkatan akurasi model. Perlu audit manusia dan pengujian di data nyata.
+
+JUMLAH DAN LABEL
+Total: 3840 pasangan; label 1: 1.920; label 0: 1.920.
+Jumlah skenario independen: 480 (24 per bidang); 8 pasangan per skenario (4 positif, 4 negatif).
+Kolom: text_a,text_b,label,bidang,jenis_pasangan
+Penyandian: UTF-8 dengan BOM agar lebih mudah dibuka di Microsoft Excel; dapat dibaca Python dengan utf-8-sig.
+
+SPLIT BERBASIS SKENARIO
+train:      3.072 baris (80,0%) — label 1 = 1.536; label 0 = 1.536; 384 skenario
+validation:   384 baris (10,0%) — label 1 = 192;   label 0 = 192;   48 skenario
+test:         384 baris (10,0%) — label 1 = 192;   label 0 = 192;   48 skenario
+Tidak ada satu pun identitas skenario yang muncul di lebih dari satu split.
+Catatan: format CSV yang diminta tidak menyertakan id_skenario; pemisahan dilakukan SEBELUM kolom internal dihapus.
+
+DISTRIBUSI PER BIDANG
+Bidang | Jumlah | Label 1 | Label 0 | Train | Validation | Test
+Pendidikan | 192 | 96 | 96 | 160 | 16 | 16
+Teknologi Informasi | 192 | 96 | 96 | 160 | 16 | 16
+Kesehatan Masyarakat | 192 | 96 | 96 | 160 | 16 | 16
+Keperawatan | 192 | 96 | 96 | 160 | 16 | 16
+Psikologi | 192 | 96 | 96 | 152 | 16 | 24
+Ekonomi | 192 | 96 | 96 | 152 | 24 | 16
+Manajemen | 192 | 96 | 96 | 152 | 16 | 24
+Akuntansi | 192 | 96 | 96 | 152 | 24 | 16
+Hukum | 192 | 96 | 96 | 152 | 16 | 24
+Administrasi Publik | 192 | 96 | 96 | 152 | 24 | 16
+Ilmu Komunikasi | 192 | 96 | 96 | 152 | 16 | 24
+Sosiologi | 192 | 96 | 96 | 152 | 24 | 16
+Pertanian | 192 | 96 | 96 | 152 | 16 | 24
+Lingkungan | 192 | 96 | 96 | 152 | 24 | 16
+Teknik Sipil | 192 | 96 | 96 | 152 | 16 | 24
+Teknik Industri | 192 | 96 | 96 | 152 | 24 | 16
+Pariwisata | 192 | 96 | 96 | 152 | 16 | 24
+Kewirausahaan | 192 | 96 | 96 | 152 | 24 | 16
+Bahasa dan Sastra Indonesia | 192 | 96 | 96 | 152 | 16 | 24
+Ilmu Politik | 192 | 96 | 96 | 152 | 24 | 16
+
+DISTRIBUSI JENIS PASANGAN
+Jenis | Jumlah
+hard_negative | 960
+kontradiksi | 960
+parafrase | 960
+penjelasan_ulang | 480
+perubahan_struktur | 480
+
+KOMPOSISI POLA SEMANTIK
+Pola | Jumlah pasangan
+eksperimen_peningkatan | 480
+eksperimen_penurunan | 480
+hasil_tidak_signifikan | 480
+hubungan_bersyarat | 480
+korelasi_positif | 480
+perbandingan_kelompok | 480
+rancangan_metode | 480
+sebelum_sesudah | 480
+
+HASIL PEMERIKSAAN OTOMATIS
+PASS: baris total 3.840; 20 bidang × 192 baris.
+PASS: tiap bidang mengandung 96 label 1 dan 96 label 0.
+PASS: split 80%/10%/10% dan label berimbang di setiap split.
+PASS: tidak ada teks kosong; semua pasangan menggunakan dua teks berbeda.
+PASS: tidak ada pasangan duplikat (berdasarkan urutan text_a/text_b).
+PASS: tidak ada pasangan teks identik dalam urutan apa pun dengan label bertentangan.
+PASS: tidak ada skenario dasar yang terbagi antar-split.
+PASS: format CSV dan kolom diuji dengan csv.DictReader; karakter Indonesia didukung.
+Jumlah text_a unik: 1920.
+Jumlah text_b unik: 3840.
+Pemeriksaan numerik: tidak ada strategi penggantian digit dalam pembentukan klaim.
+
+BATASAN DAN SARAN
+Pola kalimat dihasilkan dari delapan keluarga klaim dan 480 topik-skenario berbeda; meskipun ditulis untuk variasi, struktur antarbaris masih dapat berulang.
+Negatif mencakup pembalikan arah, ketiadaan hasil, klaim kausal tanpa dasar, perubahan rancangan, dan perpindahan populasi.
+Sejumlah kasus negatif berbeda populasi dimaksudkan menguji cakupan klaim, bukan menyatakan hasil penelitian nyata.
+Sebagian topik diterapkan dalam kondisi eksperimen hipotetis sebagai contoh bahasa akademik, bukan rancangan penelitian yang telah dijalankan.
+Perlu inspeksi manual untuk kealamian domain, potensi label ambigu, dan tingkat kesulitan sebelum dipakai sebagai data produksi.
+Skenario dalam split berbeda tidak dibagi identitas dasar; kemiripan pola template antar-split tetap memungkinkan bias evaluasi.
+Lakukan uji pada corpus nyata di luar generator ini dan pertimbangkan holdout berbasis topik yang lebih ketat.

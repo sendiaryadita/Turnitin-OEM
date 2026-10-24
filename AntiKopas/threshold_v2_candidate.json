@@ -1,0 +1,7 @@
+{
+  "model": "models/antikopas-cross-encoder-academic-v2",
+  "candidate_threshold": 1.9798558950424194,
+  "selection_split": "validation",
+  "minimum_validation_precision": 0.85,
+  "status": "belum_diterapkan"
+}
