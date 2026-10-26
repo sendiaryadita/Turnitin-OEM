@@ -248,6 +248,8 @@ button:disabled { opacity: .6; cursor: wait; }
   .dashboard-reference-card-heading h2 { font-size: 19px; }
 }
 .auth-switch { border: 0; color: #f27a61; background: transparent; cursor: pointer; font: inherit; font-size: 13px; font-weight: 700; }
+.loading-percentage { margin-left: auto; color: #f06b55; font-size: 16px; }
+.analysis-loading .loading-track i { animation: none; transform: none; transition: width .35s ease; }
 .dashboard-reference-filters { display: grid; grid-template-columns: 1fr 150px; gap: 8px; margin-bottom: 12px; }
 .dashboard-reference-filters input, .dashboard-reference-filters select { min-width: 0; padding: 9px 11px; border: 1px solid #e1dbd5; border-radius: 8px; outline: 0; color: #1e1b4b; background: #fff; font: inherit; font-size: 13px; }
 .dashboard-reference-filters input:focus, .dashboard-reference-filters select:focus { border-color: #f27a61; box-shadow: 0 0 0 3px #f27a6126; }

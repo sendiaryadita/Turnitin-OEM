@@ -24,7 +24,42 @@ function App() {
   const [stats, setStats] = useState(null)
   const [result, setResult] = useState(null)
   const [busy, setBusy] = useState(false)
+  const [analysisBusy, setAnalysisBusy] = useState(false)
+  const [analysisProgress, setAnalysisProgress] = useState(0)
   const [message, setMessage] = useState('')
+  useEffect(() => {
+    const currentView = token ? 'dashboard' : showLogin ? 'login' : 'landing'
+    if (!window.history.state?.antikopas) {
+      window.history.replaceState({ antikopas: true, view: currentView }, '', window.location.href)
+    }
+
+    function handleBrowserBack(event) {
+      if (token) {
+        window.history.pushState({ antikopas: true, view: 'dashboard' }, '', window.location.href)
+        return
+      }
+
+      const view = event.state?.antikopas ? event.state.view : 'landing'
+      setShowLogin(view === 'login')
+      setShowRegister(false)
+      setMessage('')
+    }
+
+    window.addEventListener('popstate', handleBrowserBack)
+    return () => window.removeEventListener('popstate', handleBrowserBack)
+  }, [token, showLogin])
+
+  function navigateApp(view) {
+    window.history.pushState({ antikopas: true, view }, '', window.location.href)
+  }
+
+  useEffect(() => {
+    if (!analysisBusy) return undefined
+    const timer = window.setInterval(() => {
+      setAnalysisProgress((current) => Math.min(current + Math.ceil(Math.random() * 7), 92))
+    }, 700)
+    return () => window.clearInterval(timer)
+  }, [analysisBusy])
 
   
   // Popup ketika pencarian jurnal OpenAlex gagal.
@@ -455,6 +490,8 @@ function App() {
   async function handleLogin(event) {
     event.preventDefault()
     setBusy(true)
+    setAnalysisBusy(false)
+    setAnalysisProgress(0)
     setMessage('')
     try {
       const data = await api.login(login.username, login.password)
@@ -463,6 +500,7 @@ function App() {
       setCurrentUser(null)
       setIdentityError('')
       setToken(data.access)
+      navigateApp('dashboard')
     } catch (error) {
       setMessage(error.message)
     } finally {
@@ -503,10 +541,14 @@ function App() {
       setMessage('Ukuran file terlalu besar. Maksimal ukuran file adalah 25 MB.')
       return
     }
-    setBusy(true)
+    setAnalysisBusy(true)
+    setAnalysisProgress(5)
     setMessage('Dokumen sedang dianalisis. Proses ini dapat membutuhkan waktu.')
+    let completed = false
     try {
       const data = await api.detect(form.title, form.file)
+      completed = true
+      setAnalysisProgress(100)
       setResult(data)
       setMessage('Analisis selesai.')
       setForm({ title: '', file: null })
@@ -515,7 +557,12 @@ function App() {
     } catch (error) {
       setMessage(error.message)
     } finally {
-      setBusy(false)
+      setAnalysisBusy(false)
+      if (completed) {
+        window.setTimeout(() => setAnalysisProgress(0), 900)
+      } else {
+        setAnalysisProgress(0)
+      }
     }
   }
 
@@ -566,11 +613,15 @@ function App() {
     setResult(null)
     setAnalyses([])
     setStats(null)
+    setBusy(false)
+    setAnalysisBusy(false)
+    setAnalysisProgress(0)
     setMessage('')
+    navigateApp('landing')
   }
 
   if (!token && !showLogin) {
-    return <LandingPage onStart={() => setShowLogin(true)} />
+    return <LandingPage onStart={() => { navigateApp('login'); setShowLogin(true) }} />
   }
 
   if (!token) {
@@ -582,7 +633,7 @@ function App() {
           <div className="auth-visual-copy"><h2>Analisis Dokumen<br />Tanpa Ragu</h2><p>Aman, Cepat, dan Akurat.</p></div>
         </section>
         <section className="auth-card">
-          <button className="back-link" onClick={() => setShowLogin(false)}>← Kembali ke beranda</button>
+          <button className="back-link" onClick={() => { navigateApp('landing'); setShowLogin(false) }}>← Kembali ke beranda</button>
           <div className="auth-brand"><img className="brand-image auth-logo" src={logo} alt="Logo AntiKopas" /><span>Anti<span>Kopas</span></span></div>
           <p className="eyebrow">RUANG KERJA AKADEMIK DIGITAL</p>
           <h1>{showRegister ? <>Buat akun <em>baru.</em></> : <>Masuk untuk <em>memeriksa.</em></>}</h1>
@@ -696,8 +747,8 @@ function App() {
                 <small>Mendukung format PDF & Word (.docx)</small>
               </span>
             </label>
-            <button className="dashboard-reference-submit" disabled={busy}>{busy ? 'Menganalisis...' : <>Mulai analisis <LineIcon type="search" /></>}</button>
-            {busy && <div className="analysis-loading" role="status" aria-live="polite"><div className="loading-heading"><span className="loading-spinner"></span><strong>Sedang menganalisis dokumen</strong></div><p>Dokumen sedang dibaca dan dibandingkan dengan sumber akademik.</p><div className="loading-track"><i></i></div><small>Mohon tunggu, proses ini dapat membutuhkan waktu.</small></div>}
+            <button className="dashboard-reference-submit" disabled={analysisBusy}>{analysisBusy ? 'Menganalisis...' : <>Mulai analisis <LineIcon type="search" /></>}</button>
+            {(analysisBusy && form.file || analysisProgress > 0 && form.file) && <div className="analysis-loading" role="status" aria-live="polite"><div className="loading-heading"><span className="loading-spinner"></span><strong>{analysisProgress === 100 ? 'Analisis selesai' : 'Sedang menganalisis dokumen'}</strong><b className="loading-percentage">{analysisProgress}%</b></div><p>Dokumen sedang dibaca dan dibandingkan dengan sumber akademik.</p><div className="loading-track"><i style={{ width: `${analysisProgress}%` }}></i></div><small>{analysisProgress === 100 ? 'Analisis berhasil diselesaikan.' : 'Mohon tunggu, proses ini dapat membutuhkan waktu.'}</small></div>}
             {message && <p className="notice">{message}</p>}
           </form>
           <section className="dashboard-reference-card dashboard-reference-history">
