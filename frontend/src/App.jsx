@@ -23,6 +23,7 @@ function App() {
   const [historyStatus, setHistoryStatus] = useState('')
   const [stats, setStats] = useState(null)
   const [result, setResult] = useState(null)
+  const [editingAnalysis, setEditingAnalysis] = useState(null)
   const [busy, setBusy] = useState(false)
   const [analysisBusy, setAnalysisBusy] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
@@ -580,14 +581,31 @@ function App() {
   }
 
   async function handleRename(item) {
-    const title = window.prompt('Masukkan judul baru:', item.title)
-    if (title === null || !title.trim() || title.trim() === item.title) return
+    setEditingAnalysis({ id: item.id, title: item.title, error: '' })
+  }
+
+  async function handleSaveRename(event) {
+    event.preventDefault()
+    const title = editingAnalysis?.title.trim() || ''
+    if (!title) {
+      setEditingAnalysis((current) => ({ ...current, error: 'Judul wajib diisi.' }))
+      return
+    }
+    if (title.length > 500) {
+      setEditingAnalysis((current) => ({ ...current, error: 'Judul maksimal 500 karakter.' }))
+      return
+    }
+    if (title === editingAnalysis.title) {
+      setEditingAnalysis(null)
+      return
+    }
     try {
-      await api.updateAnalysis(item.id, title.trim())
+      await api.updateAnalysis(editingAnalysis.id, title)
       setMessage('Judul analisis berhasil diperbarui.')
+      setEditingAnalysis(null)
       await loadAnalyses()
     } catch (error) {
-      setMessage(error.message)
+      setEditingAnalysis((current) => ({ ...current, error: error.message }))
     }
   }
 
@@ -760,6 +778,7 @@ function App() {
         </div>
         {stats && <section className="dashboard-reference-stats"><div><strong>{stats.total_analyses}</strong><span>Total analisis</span></div><div><strong>{stats.completed_analyses}</strong><span>Selesai</span></div><div><strong>{stats.processing_analyses}</strong><span>Diproses</span></div><div><strong>{Number(stats.average_similarity).toFixed(2)}%</strong><span>Rata-rata kemiripan</span></div></section>}
         {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks} dari {result.total_chunks} segmen cocok</p>{result.diagnostic_message && <p className="notice diagnostic">{result.diagnostic_message}</p>}{result.source_similarities?.length > 0 && <div className="source-summary"><h3>Sumber yang cocok</h3>{result.source_similarities.slice(0, 5).map((source) => <div className="source-summary-item" key={source.openalex_id || source.doi || source.title}><div><strong>{source.title}</strong><span>{source.matched_chunks} segmen · {Number(source.similarity_percentage).toFixed(2)}%</span></div>{source.url && <a href={source.url} target="_blank" rel="noreferrer">Buka sumber</a>}</div>)}</div>}</div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
+        {editingAnalysis && <div className="edit-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingAnalysis(null) }}><form className="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-analysis-title" onSubmit={handleSaveRename}><div className="edit-modal-icon"><LineIcon type="pencil" /></div><h2 id="edit-analysis-title">Edit judul analisis</h2><p>Perbarui judul dokumen agar lebih mudah ditemukan di riwayat.</p><label>Judul dokumen<input autoFocus value={editingAnalysis.title} onChange={(event) => setEditingAnalysis({ ...editingAnalysis, title: event.target.value, error: '' })} maxLength={500} /></label>{editingAnalysis.error && <small className="edit-modal-error">{editingAnalysis.error}</small>}<div className="edit-modal-actions"><button type="button" className="edit-modal-cancel" onClick={() => setEditingAnalysis(null)}>Batal</button><button type="submit" className="edit-modal-save">Simpan perubahan</button></div></form></div>}
       </section>
     </main>
   )
