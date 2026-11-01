@@ -261,23 +261,23 @@ def analyze_antikopas(
 
     if excluded_segments or excluded_matches:
         diagnostic_parts.append(
-            "Perhitungan tanpa sitasi: "
-            f"{matched_chunks} dari "
-            f"{total_chunks} segmen layak dinilai cocok. "
-            f"{excluded_segments} segmen dokumen "
-            "bersitasi dikecualikan dan "
-            f"{excluded_matches} pasangan bukti "
-            "bersitasi tidak digunakan."
+            "Dari "
+            f"{total_chunks} bagian dokumen yang diperiksa, "
+            f"{matched_chunks} bagian menunjukkan kemiripan. "
+            f"{excluded_segments} bagian yang memiliki sitasi "
+            "tidak dihitung sebagai kemiripan. "
+            f"{excluded_matches} kecocokan dari sumber bersitasi "
+            "juga tidak digunakan."
         )
 
     if total_chunks == 0:
         diagnostic_code = "no_eligible_segments"
 
         diagnostic_parts.append(
-            "Tidak ada segmen tanpa sitasi "
-            "yang dapat dinilai. "
-            "Angka 0% pada kondisi ini bukan "
-            "bukti bahwa dokumen tidak mirip."
+            "Tidak ada bagian dokumen tanpa sitasi "
+            "yang dapat dibandingkan. "
+            "Angka 0% pada kondisi ini bukan berarti "
+            "dokumen Anda pasti tidak memiliki kemiripan."
         )
 
     diagnostic_message = " ".join(

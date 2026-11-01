@@ -2,14 +2,19 @@ import { useCallback, useEffect, useState } from 'react'
 import { api } from './api/client'
 import logo from './assets/antikopas-logo.png'
 import heroIllustration from './assets/image-transparent.png'
-import heroIllustrationOriginal from './assets/image.png'
-import gambar1 from './assets/gambar1.jpg'
-import gambar2 from './assets/gambar2.jpg'
-import gambar3 from './assets/gambar3.jpg'
+import heroIllustrationDark from './assets/image-dark-transparent.png'
+import heroIllustrationOriginal from './assets/image-auth-transparent.png'
+import gambar1 from './assets/gambar1-clean.png'
+import gambar2 from './assets/gambar2-clean.png'
+import gambar3 from './assets/gambar3-clean.png'
+import gambar4 from './assets/gambar4-transparent.png'
+import gambar5 from './assets/gambar5-transparent.png'
+import gambar6 from './assets/gambar6-transparent.png'
 import './App.css'
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('antikopas_access'))
+  const [theme, setTheme] = useState(() => localStorage.getItem('antikopas_theme') || 'light')
   const [currentUser, setCurrentUser] = useState(null)
   const [identityError, setIdentityError] = useState('')
   const [showLogin, setShowLogin] = useState(false)
@@ -28,6 +33,14 @@ function App() {
   const [analysisBusy, setAnalysisBusy] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
   const [message, setMessage] = useState('')
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    localStorage.setItem('antikopas_theme', theme)
+  }, [theme])
+
+  function toggleTheme() {
+    setTheme((currentTheme) => currentTheme === 'dark' ? 'light' : 'dark')
+  }
   useEffect(() => {
     const currentView = token ? 'dashboard' : showLogin ? 'login' : 'landing'
     if (!window.history.state?.antikopas) {
@@ -546,6 +559,13 @@ function App() {
     setAnalysisProgress(5)
     setMessage('Dokumen sedang dianalisis. Proses ini dapat membutuhkan waktu.')
     let completed = false
+    const progressTimer = window.setInterval(() => {
+      setAnalysisProgress((currentProgress) => Math.min(currentProgress + 1, 92))
+    }, 350)
+    const statsRefreshTimer = window.setInterval(() => {
+      loadAnalyses()
+      loadStats()
+    }, 1500)
     try {
       const data = await api.detect(form.title, form.file)
       completed = true
@@ -555,9 +575,12 @@ function App() {
       setForm({ title: '', file: null })
       event.target.reset()
       await loadAnalyses()
+      await loadStats()
     } catch (error) {
       setMessage(error.message)
     } finally {
+      window.clearInterval(progressTimer)
+      window.clearInterval(statsRefreshTimer)
       setAnalysisBusy(false)
       if (completed) {
         window.setTimeout(() => setAnalysisProgress(0), 900)
@@ -639,7 +662,7 @@ function App() {
   }
 
   if (!token && !showLogin) {
-    return <LandingPage onStart={() => { navigateApp('login'); setShowLogin(true) }} />
+    return <LandingPage theme={theme} onToggleTheme={toggleTheme} onStart={() => { navigateApp('login'); setShowLogin(true) }} />
   }
 
   if (!token) {
@@ -651,6 +674,7 @@ function App() {
           <div className="auth-visual-copy"><h2>Analisis Dokumen<br />Tanpa Ragu</h2><p>Aman, Cepat, dan Akurat.</p></div>
         </section>
         <section className="auth-card">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <button className="back-link" onClick={() => { navigateApp('landing'); setShowLogin(false) }}>← Kembali ke beranda</button>
           <div className="auth-brand"><img className="brand-image auth-logo" src={logo} alt="Logo AntiKopas" /><span>Anti<span>Kopas</span></span></div>
           <p className="eyebrow">RUANG KERJA AKADEMIK DIGITAL</p>
@@ -704,6 +728,7 @@ function App() {
       <main className="dashboard-reference">
         <nav className="dashboard-reference-nav">
           <div className="dashboard-reference-actions">
+            <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <span className="dashboard-reference-avatar" aria-label={`Akun ${currentUser.username}`}>{currentUser.username.charAt(0).toUpperCase()}</span>
             <button className="dashboard-reference-logout" onClick={logout}><LineIcon type="logout" /> Keluar</button>
           </div>
@@ -741,6 +766,7 @@ function App() {
     <main className="dashboard-reference">
       <nav className="dashboard-reference-nav">
         <div className="dashboard-reference-actions">
+          <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <span className="dashboard-reference-avatar" aria-label={`Akun ${currentUser.username}`}>{currentUser.username.charAt(0).toUpperCase()}</span>
           <button className="dashboard-reference-logout" onClick={logout}><LineIcon type="logout" /> Keluar</button>
         </div>
@@ -772,12 +798,12 @@ function App() {
           <section className="dashboard-reference-card dashboard-reference-history">
             <div className="dashboard-reference-card-heading"><h2>Riwayat analisis</h2><button className="dashboard-reference-refresh" onClick={() => { loadAnalyses(); loadStats() }}><LineIcon type="refresh" /> Muat ulang</button></div>
             <div className="dashboard-reference-filters"><input value={historyQuery} onChange={(e) => { setHistoryQuery(e.target.value); setHistoryMeta({ ...historyMeta, page: 1 }) }} placeholder="Cari judul analisis..." /><select value={historyStatus} onChange={(e) => { setHistoryStatus(e.target.value); setHistoryMeta({ ...historyMeta, page: 1 }) }}><option value="">Semua status</option><option value="processing">Diproses</option><option value="completed">Selesai</option><option value="failed">Gagal</option></select></div>
-            {analyses.length === 0 ? <div className="dashboard-reference-empty"><div className="dashboard-reference-empty-art"><svg width="100" height="100" viewBox="0 0 100 100" fill="none" aria-hidden="true"><rect x="25" y="15" width="45" height="60" rx="4" fill="white" stroke="#1e1b4b" strokeWidth="2.5"/><line x1="35" y1="30" x2="60" y2="30" stroke="#f27a61" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="40" x2="60" y2="40" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="50" x2="60" y2="50" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="60" x2="50" y2="60" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><circle cx="55" cy="55" r="14" fill="#fcfaf8" stroke="#1e1b4b" strokeWidth="3"/><line x1="65" y1="65" x2="78" y2="78" stroke="#f27a61" strokeWidth="6" strokeLinecap="round"/></svg></div><h3>{historyQuery || historyStatus ? 'Tidak ada hasil' : 'Belum ada analisis.'}</h3><p>{historyQuery || historyStatus ? 'Coba ubah kata kunci atau filter.' : 'Dokumen yang Anda periksa akan muncul di sini.'}</p></div> : <div className="history">{analyses.map((item) => <div className="history-item" key={item.id}><div><strong>{item.title}</strong><span>{item.status} · {item.matched_chunks}/{item.total_chunks} chunk cocok</span></div><b>{item.similarity_index.toFixed(2)}%</b><div className="history-actions"><button className="history-action" onClick={() => handleRename(item)}>Edit</button>{item.report_url && <button className="history-action" onClick={() => handleOpenReport(item.report_url)}>Report</button>}<button className="delete-button" onClick={() => handleDelete(item.id)} aria-label={`Hapus ${item.title}`}>Hapus</button></div></div>)}</div>}
+            {analyses.length === 0 ? <div className="dashboard-reference-empty"><div className="dashboard-reference-empty-art"><svg width="100" height="100" viewBox="0 0 100 100" fill="none" aria-hidden="true"><rect x="25" y="15" width="45" height="60" rx="4" fill="white" stroke="#1e1b4b" strokeWidth="2.5"/><line x1="35" y1="30" x2="60" y2="30" stroke="#f27a61" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="40" x2="60" y2="40" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="50" x2="60" y2="50" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="60" x2="50" y2="60" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><circle cx="55" cy="55" r="14" fill="#fcfaf8" stroke="#1e1b4b" strokeWidth="3"/><line x1="65" y1="65" x2="78" y2="78" stroke="#f27a61" strokeWidth="6" strokeLinecap="round"/></svg></div><h3>{historyQuery || historyStatus ? 'Tidak ada hasil' : 'Belum ada analisis.'}</h3><p>{historyQuery || historyStatus ? 'Coba ubah kata kunci atau filter.' : 'Dokumen yang Anda periksa akan muncul di sini.'}</p></div> : <div className="history">{analyses.map((item) => <div className="history-item" key={item.id}><div><strong>{item.title}</strong><span>{item.status === 'completed' ? 'Selesai' : item.status === 'processing' || item.status === 'pending' ? 'Diproses' : 'Gagal'}</span></div><b>{item.similarity_index.toFixed(2)}%</b><div className="history-actions"><button className="history-action" onClick={() => handleRename(item)}>Edit</button>{item.report_url && <button className="history-action" onClick={() => handleOpenReport(item.report_url)}>Report</button>}<button className="delete-button" onClick={() => handleDelete(item.id)} aria-label={`Hapus ${item.title}`}>Hapus</button></div></div>)}</div>}
             {historyMeta.totalPages > 1 && <div className="dashboard-reference-pagination"><button disabled={historyMeta.page <= 1} onClick={() => setHistoryMeta({ ...historyMeta, page: historyMeta.page - 1 })}>Sebelumnya</button><span>Halaman {historyMeta.page} dari {historyMeta.totalPages}</span><button disabled={historyMeta.page >= historyMeta.totalPages} onClick={() => setHistoryMeta({ ...historyMeta, page: historyMeta.page + 1 })}>Berikutnya</button></div>}
           </section>
         </div>
         {stats && <section className="dashboard-reference-stats"><div><strong>{stats.total_analyses}</strong><span>Total analisis</span></div><div><strong>{stats.completed_analyses}</strong><span>Selesai</span></div><div><strong>{stats.processing_analyses}</strong><span>Diproses</span></div><div><strong>{Number(stats.average_similarity).toFixed(2)}%</strong><span>Rata-rata kemiripan</span></div></section>}
-        {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks} dari {result.total_chunks} segmen cocok</p>{result.diagnostic_message && <p className="notice diagnostic">{result.diagnostic_message}</p>}{result.source_similarities?.length > 0 && <div className="source-summary"><h3>Sumber yang cocok</h3>{result.source_similarities.slice(0, 5).map((source) => <div className="source-summary-item" key={source.openalex_id || source.doi || source.title}><div><strong>{source.title}</strong><span>{source.matched_chunks} segmen · {Number(source.similarity_percentage).toFixed(2)}%</span></div>{source.url && <a href={source.url} target="_blank" rel="noreferrer">Buka sumber</a>}</div>)}</div>}</div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
+        {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks === 0 ? `Tidak ada bagian dokumen yang menunjukkan kemiripan dari ${result.total_chunks} bagian yang diperiksa.` : `${result.matched_chunks} dari ${result.total_chunks} bagian dokumen menunjukkan kemiripan.`}</p>{result.diagnostic_message && <p className="notice diagnostic">{result.diagnostic_message}</p>}{result.source_similarities?.length > 0 && <div className="source-summary"><h3>Sumber yang cocok</h3>{result.source_similarities.slice(0, 5).map((source) => <div className="source-summary-item" key={source.openalex_id || source.doi || source.title}><div><strong>{source.title}</strong><span>{source.matched_chunks} bagian · {Number(source.similarity_percentage).toFixed(2)}%</span></div>{source.url && <a href={source.url} target="_blank" rel="noreferrer">Buka sumber</a>}</div>)}</div>}</div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
         {editingAnalysis && <div className="edit-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingAnalysis(null) }}><form className="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-analysis-title" onSubmit={handleSaveRename}><div className="edit-modal-icon"><LineIcon type="pencil" /></div><h2 id="edit-analysis-title">Edit judul analisis</h2><p>Perbarui judul dokumen agar lebih mudah ditemukan di riwayat.</p><label>Judul dokumen<input autoFocus value={editingAnalysis.title} onChange={(event) => setEditingAnalysis({ ...editingAnalysis, title: event.target.value, error: '' })} maxLength={500} /></label>{editingAnalysis.error && <small className="edit-modal-error">{editingAnalysis.error}</small>}<div className="edit-modal-actions"><button type="button" className="edit-modal-cancel" onClick={() => setEditingAnalysis(null)}>Batal</button><button type="submit" className="edit-modal-save">Simpan perubahan</button></div></form></div>}
       </section>
     </main>
@@ -792,15 +818,24 @@ function LineIcon({ type }) {
     search: <><rect x="5" y="3" width="11" height="17" rx="2" /><path d="M9 8h4M9 12h3" /><circle cx="16.5" cy="16.5" r="3.5" /><path d="m19 19 2 2" /></>,
     pencil: <><path d="m4 16-.7 4.7L8 20l10.8-10.8a2.2 2.2 0 0 0-3.1-3.1L4 16Z" /><path d="m14.5 7.5 3 3" /></>,
     logout: <><path d="M10 4H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h5M15 16l4-4-4-4M19 12H9" /></>,
-    spark: <><path d="m12 3 1.7 5.3L19 10l-5.3 1.7L12 17l-1.7-5.3L5 10l5.3-1.7L12 3Z" /><path d="m19 16 .7 2.3L22 19l-2.3.7L19 22l-.7-2.3L16 19l2.3-.7L19 16Z" /></>,
+    evidence: <><rect x="5" y="3" width="14" height="18" rx="2" /><path d="M8 8h8M8 12h8M8 16h5" /><path d="m16 15 2 2 3-4" /></>,
+    archive: <><path d="M4 7h16v13H4z" /><path d="M3 4h18v3H3zM9 11h6M9 15h6" /></>,
+    shield: <><path d="M12 3 20 6v5c0 5-3.4 8.5-8 10-4.6-1.5-8-5-8-10V6l8-3Z" /><path d="m8.5 12 2.3 2.3 4.8-5" /></>,
     folder: <><path d="M3 7a2 2 0 0 1 2-2h5l2 2h7a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z" /></>,
     lock: <><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v2" /></>,
     chart: <><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M7 17v-4M12 17V8M17 17v-7M6 17h12" /></>,
+    moon: <><path d="M20.5 15.2A8.5 8.5 0 0 1 8.8 3.5 8.5 8.5 0 1 0 20.5 15.2Z" /></>,
+    sun: <><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41" /></>,
   }
   return <svg className="line-icon" viewBox="0 0 24 24" aria-hidden="true">{paths[type]}</svg>
 }
 
-function LandingPage({ onStart }) {
+function ThemeToggle({ theme, onToggle }) {
+  const isDark = theme === 'dark'
+  return <button className="theme-toggle" type="button" onClick={onToggle} aria-label={isDark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'} title={isDark ? 'Mode terang' : 'Mode gelap'}><span className="theme-toggle-icon"><LineIcon type={isDark ? 'sun' : 'moon'} /></span><span className="theme-toggle-label">{isDark ? 'Terang' : 'Gelap'}</span></button>
+}
+
+function LandingPage({ theme, onToggleTheme, onStart }) {
   return (
     <main className="landing-page">
       <header className="landing-nav">
@@ -813,7 +848,7 @@ function LandingPage({ onStart }) {
           <a href="#fitur">Keunggulan</a>
           <a href="#keamanan">Keamanan</a>
         </nav>
-        <button className="nav-login" onClick={onStart}>Masuk ke aplikasi</button>
+        <div className="landing-nav-actions"><ThemeToggle theme={theme} onToggle={onToggleTheme} /><button className="nav-login" onClick={onStart}>Masuk ke aplikasi</button></div>
       </header>
 
       <section className="landing-hero" id="top">
@@ -821,10 +856,10 @@ function LandingPage({ onStart }) {
           <p className="landing-kicker">RUANG KERJA AKADEMIK DIGITAL</p>
           <h1>Temukan kemiripan.<br /><em>Jaga orisinalitas.</em></h1>
           <p className="hero-description">Analisis dokumen akademik dengan alur yang sederhana, hasil yang transparan, dan laporan yang siap digunakan.</p>
-          <div className="hero-actions"><button className="hero-button" onClick={onStart}>Mulai pemeriksaan <span>↗</span></button><a href="#cara-kerja" className="hero-secondary">Lihat cara kerja</a></div>
+          <div className="hero-actions"><button className="hero-button" onClick={onStart}>Mulai pemeriksaan <span className="hero-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 18 17 7M9 7h8v8" /></svg></span></button><a href="#cara-kerja" className="hero-secondary">Lihat cara kerja</a></div>
           <div className="hero-proof"><span className="proof-dot"></span><span>PDF & DOCX</span><span className="proof-divider">•</span><span>Berbasis sumber akademik</span></div>
         </div>
-        <div className="hero-art"><img className="hero-illustration" src={heroIllustration} alt="Ilustrasi analisis kemiripan dokumen" /></div>
+        <div className="hero-art"><img className="hero-illustration" src={theme === 'dark' ? heroIllustrationDark : heroIllustration} alt="Ilustrasi analisis kemiripan dokumen" /></div>
       </section>
 
       <section className="trust-strip"><span>Dirancang untuk penulis akademik</span><b>Draft</b><b>Research</b><b>Review</b><b>Report</b></section>
@@ -832,11 +867,11 @@ function LandingPage({ onStart }) {
       <AlurRingkas />
 
       <section className="landing-section feature-section" id="fitur">
-        <div className="feature-intro"><p className="landing-kicker">DIBUAT UNTUK KERJA YANG SERIUS</p><h2>Lebih dari sekadar<br /><em>angka persentase.</em></h2><div className="feature-visual"><div className="source-tag">Source match <i></i><i></i></div><div className="report-sheet"><b></b><b></b><b></b><i></i><i></i><i></i></div><div className="match-tag">Dokumen <strong>24%</strong></div></div></div>
-        <div className="feature-list"><article><span><LineIcon type="spark" /></span><div><h3>Evidence-first</h3><p>Hasil dilengkapi potongan sumber agar angka dapat dipahami dan ditinjau.</p></div></article><article><span><LineIcon type="folder" /></span><div><h3>Rapi sejak awal</h3><p>Riwayat analisis tersimpan teratur dan report dapat dibuka kembali.</p></div></article><article id="keamanan"><span><LineIcon type="lock" /></span><div><h3>Workspace privat</h3><p>Akses dibatasi akun pengguna dan dokumen tidak masuk repository publik.</p></div></article></div>
+        <div className="feature-intro"><p className="landing-kicker">DIBUAT UNTUK KERJA YANG SERIUS</p><h2>Lebih dari sekadar<br /><em>angka persentase.</em></h2><div className="feature-visual"><img src={gambar6} alt="Visual dokumen dan sumber kemiripan" /></div></div>
+        <div className="feature-list"><article><span><LineIcon type="evidence" /></span><div><h3>Evidence-first</h3><p>Hasil dilengkapi potongan sumber agar angka dapat dipahami dan ditinjau.</p></div></article><article><span><LineIcon type="archive" /></span><div><h3>Rapi sejak awal</h3><p>Riwayat analisis tersimpan teratur dan report dapat dibuka kembali.</p></div></article><article id="keamanan"><span><LineIcon type="shield" /></span><div><h3>Workspace privat</h3><p>Akses dibatasi akun pengguna dan dokumen tidak masuk repository publik.</p></div></article></div>
       </section>
 
-      <section className="landing-cta"><div className="cta-deco cta-doc"><div><LineIcon type="file" /><LineIcon type="lock" /></div></div><div className="cta-content"><p className="landing-kicker">SIAP MEMULAI?</p><h2>Jadikan pemeriksaan akademik<br /><em>lebih tenang dan terukur.</em></h2><button className="hero-button" onClick={onStart}>Masuk ke workspace <span>↗</span></button></div><div className="cta-deco cta-chart"><LineIcon type="chart" /></div></section>
+      <section className="landing-cta"><div className="cta-deco cta-doc"><img className="cta-doc-image" src={gambar4} alt="Dokumen akademik terlindungi" /></div><div className="cta-content"><p className="landing-kicker">SIAP MEMULAI?</p><h2>Jadikan pemeriksaan akademik<br /><em>lebih tenang dan terukur.</em></h2><button className="hero-button" onClick={onStart}>Masuk ke workspace <span className="hero-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 18 17 7M9 7h8v8" /></svg></span></button></div><div className="cta-deco cta-chart"><img className="cta-chart-image" src={gambar5} alt="Grafik analisis akademik" /></div></section>
       <footer className="landing-footer"><strong>AntiKopas</strong><span>Academic similarity workspace</span><span>© 2026</span></footer>
     </main>
   )
@@ -873,7 +908,14 @@ function AlurRingkas() {
 
 function FlowArrow({ className, curve }) {
   const path = curve === 'down' ? 'M0 10 Q50 20 100 10' : 'M0 10 Q50 0 100 10'
-  return <div className={`alur-arrow ${className}`} aria-hidden="true"><svg viewBox="0 0 100 20" fill="none" stroke="#64748b" strokeWidth="1.5" strokeDasharray="4 4"><path d={path} /><polyline points="95,5 100,10 95,15" strokeDasharray="none" /></svg></div>
+  return (
+    <div className={`alur-arrow ${className}`} aria-hidden="true">
+      <svg viewBox="0 0 100 20" fill="none">
+        <path className="alur-arrow-line" d={path} stroke="#f06b55" strokeWidth="2" strokeLinecap="round" />
+        <polyline points="93,5 100,10 93,15" stroke="#f06b55" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </div>
+  )
 }
 
 export default App

@@ -1846,6 +1846,6 @@ def analyze_with_openalex(
     if matched_chunks == 0:
         pipeline_results.diagnostic_code = "no_match_found"
         pipeline_results.diagnostic_message = (
-            "Tidak ditemukan segmen yang memenuhi ambang kemiripan."
+            "Tidak ditemukan bagian dokumen yang menunjukkan kemiripan yang cukup kuat."
         )
     return pipeline_results
