@@ -139,6 +139,18 @@ def analysis_list(request):
                 "id": job.id,
                 "title": job.document.title,
                 "status": job.status,
+                "progress_percent": (
+                    100
+                    if job.status == AnalysisJob.Status.COMPLETED
+                    else job.progress_percent
+                ),
+                "progress_stage": (
+                    "Pemeriksaan selesai"
+                    if job.status == AnalysisJob.Status.COMPLETED
+                    else "Pemeriksaan gagal"
+                    if job.status == AnalysisJob.Status.FAILED
+                    else job.progress_stage
+                ),
                 "similarity_index": float(job.similarity_index),
                 "total_chunks": job.total_chunks,
                 "matched_chunks": job.matched_chunks,
@@ -350,6 +362,8 @@ def detect_similarity(request):
     analysis_job = AnalysisJob.objects.create(
         document=document,
         status=AnalysisJob.Status.PROCESSING,
+        progress_percent=2,
+        progress_stage="Membaca dokumen",
         started_at=datetime.now(),
     )
 
@@ -360,6 +374,63 @@ def detect_similarity(request):
     from .services.document_parser import extract_text
     from .services.report_generator import generate_report
 
+    def update_analysis_progress(progress_data):
+        """Simpan progress tanpa membiarkan kegagalannya membatalkan scan."""
+        if not isinstance(progress_data, dict):
+            return
+
+        try:
+            current_percent = int(analysis_job.progress_percent or 0)
+            incoming_percent = int(round(float(
+                progress_data.get("percent", current_percent)
+            )))
+            incoming_percent = max(0, min(incoming_percent, 99))
+
+            # Progress tidak boleh mundur jika callback datang tidak berurutan.
+            if incoming_percent < current_percent:
+                return
+
+            stage = str(
+                progress_data.get("stage")
+                or analysis_job.progress_stage
+                or "Memproses dokumen"
+            ).strip()[:100]
+            if not stage:
+                stage = "Memproses dokumen"
+
+            updated = AnalysisJob.objects.filter(
+                pk=analysis_job.pk,
+                status=AnalysisJob.Status.PROCESSING,
+            ).update(
+                progress_percent=incoming_percent,
+                progress_stage=stage,
+            )
+
+            if updated:
+                analysis_job.progress_percent = incoming_percent
+                analysis_job.progress_stage = stage
+
+        except Exception as progress_error:
+            # Progress hanya untuk tampilan. Gangguan saat menyimpannya
+            # tidak boleh menghentikan proses analisis yang sebenarnya.
+            print(
+                "[Progress] Gagal menyimpan progress:",
+                type(progress_error).__name__,
+            )
+
+    def mark_analysis_failed(error):
+        """Catat kegagalan tanpa mengubah progress menjadi 100%."""
+        analysis_job.status = AnalysisJob.Status.FAILED
+        analysis_job.error_message = str(error)
+        analysis_job.completed_at = datetime.now()
+        analysis_job.progress_stage = "Pemeriksaan gagal"
+        analysis_job.save(update_fields=[
+            "status",
+            "error_message",
+            "completed_at",
+            "progress_stage",
+        ])
+
     # --------------------------------------
     # D. EKSTRAKSI DOKUMEN
     # --------------------------------------
@@ -368,20 +439,14 @@ def detect_similarity(request):
         text = extract_text(uploaded_file)
 
     except ValueError as e:
-        analysis_job.status = AnalysisJob.Status.FAILED
-        analysis_job.error_message = str(e)
-        analysis_job.completed_at = datetime.now()
-        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
+        mark_analysis_failed(e)
         return Response({
             "status": "error",
             "message": str(e)
         }, status=400)
 
     except Exception as e:
-        analysis_job.status = AnalysisJob.Status.FAILED
-        analysis_job.error_message = str(e)
-        analysis_job.completed_at = datetime.now()
-        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
+        mark_analysis_failed(e)
         return Response({
             "status": "error",
             "message": (
@@ -390,14 +455,17 @@ def detect_similarity(request):
         }, status=400)
 
     if not text or not str(text).strip():
-        analysis_job.status = AnalysisJob.Status.FAILED
-        analysis_job.error_message = "Isi dokumen tidak dapat dibaca"
-        analysis_job.completed_at = datetime.now()
-        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
+        mark_analysis_failed("Isi dokumen tidak dapat dibaca")
         return Response({
             "status": "error",
             "message": "Isi dokumen tidak dapat dibaca"
         }, status=400)
+
+    update_analysis_progress({
+        "percent": 10,
+        "stage": "Dokumen berhasil dibaca",
+        "message": "Dokumen berhasil dibaca dan siap diperiksa.",
+    })
 
     # --------------------------------------
     # E. ANALISIS AI
@@ -406,14 +474,12 @@ def detect_similarity(request):
     try:
         analysis = analyze_antikopas(
             text,
-            title
+            title,
+            progress_callback=update_analysis_progress,
         )
 
     except Exception as e:
-        analysis_job.status = AnalysisJob.Status.FAILED
-        analysis_job.error_message = str(e)
-        analysis_job.completed_at = datetime.now()
-        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
+        mark_analysis_failed(e)
         return Response({
             "status": "error",
             "message": (
@@ -454,6 +520,11 @@ def detect_similarity(request):
 
     # Simpan hasil analisis sementara.
     # Status tetap PROCESSING sampai laporan PDF berhasil disimpan.
+    update_analysis_progress({
+        "percent": 98,
+        "stage": "Menyimpan hasil pemeriksaan",
+        "message": "Hasil perbandingan selesai dan sedang disimpan.",
+    })
     analysis_job.total_chunks = total_chunks
     analysis_job.matched_chunks = matched_chunks
     analysis_job.similarity_index = float(similarity_index or 0)
@@ -603,6 +674,12 @@ def detect_similarity(request):
     # J. GENERATE PDF REPORT LENGKAP
     # --------------------------------------
 
+    update_analysis_progress({
+        "percent": 99,
+        "stage": "Menyusun laporan PDF",
+        "message": "Hasil pemeriksaan sedang disusun menjadi laporan.",
+    })
+
     try:
         generate_report(
 
@@ -655,10 +732,7 @@ def detect_similarity(request):
         )
 
     except Exception as e:
-        analysis_job.status = AnalysisJob.Status.FAILED
-        analysis_job.error_message = str(e)
-        analysis_job.completed_at = datetime.now()
-        analysis_job.save(update_fields=["status", "error_message", "completed_at"])
+        mark_analysis_failed(e)
         return Response({
             "status": "error",
             "message": (
@@ -667,20 +741,31 @@ def detect_similarity(request):
             )
         }, status=500)
 
-    with open(report_path, "rb") as report_file:
-        Report.objects.update_or_create(
-            analysis=analysis_job,
-            defaults={"file": File(report_file, name=report_filename)},
-        )
+    try:
+        with open(report_path, "rb") as report_file:
+            Report.objects.update_or_create(
+                analysis=analysis_job,
+                defaults={"file": File(report_file, name=report_filename)},
+            )
+    except Exception as e:
+        mark_analysis_failed(e)
+        return Response({
+            "status": "error",
+            "message": f"Gagal menyimpan laporan PDF: {str(e)}",
+        }, status=500)
 
     # Analisis dinyatakan selesai setelah laporan PDF tersimpan.
     # Waktu ini akan menjadi acuan masa simpan dokumen 2 jam.
     analysis_job.status = AnalysisJob.Status.COMPLETED
     analysis_job.completed_at = timezone.now()
+    analysis_job.progress_percent = 100
+    analysis_job.progress_stage = "Pemeriksaan selesai"
 
     analysis_job.save(update_fields=[
         "status",
         "completed_at",
+        "progress_percent",
+        "progress_stage",
     ])
 
     # --------------------------------------

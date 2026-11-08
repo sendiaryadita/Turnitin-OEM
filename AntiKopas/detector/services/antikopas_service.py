@@ -6,6 +6,32 @@ from .full_pipeline import analyze_with_openalex
 from .similarity_index import calculate_similarity_index
 
 
+def _report_analysis_progress(
+    progress_callback,
+    percent,
+    stage,
+    message=None,
+):
+    """Laporkan tahapan layanan tanpa mengganggu analisis utama."""
+    if not callable(progress_callback):
+        return
+
+    try:
+        payload = {
+            "percent": max(0, min(99, int(round(percent)))),
+            "stage": str(stage),
+        }
+        if message:
+            payload["message"] = str(message)
+
+        progress_callback(payload)
+    except Exception as error:
+        print(
+            "[AntiKopas] Peringatan: callback progress gagal:",
+            type(error).__name__,
+        )
+
+
 # ==================================================
 # DETEKSI SITASI AKADEMIK
 # ==================================================
@@ -171,14 +197,31 @@ def filter_cited_segments(document_results):
 def analyze_antikopas(
     document_text,
     document_title=None,
+    progress_callback=None,
 ):
     # ----------------------------------------------
     # 1. JALANKAN AI
     # ----------------------------------------------
 
-    document_results = analyze_with_openalex(
-        document_text,
-        document_title,
+    # Pertahankan kompatibilitas pemanggilan lama.
+    # Callback hanya diteruskan jika pemanggil memang menyediakannya.
+    if callable(progress_callback):
+        document_results = analyze_with_openalex(
+            document_text,
+            document_title,
+            progress_callback=progress_callback,
+        )
+    else:
+        document_results = analyze_with_openalex(
+            document_text,
+            document_title,
+        )
+
+    _report_analysis_progress(
+        progress_callback,
+        95,
+        "Menghitung hasil pemeriksaan",
+        "Perbandingan sumber selesai. Menghitung hasil kemiripan dokumen.",
     )
 
     # ----------------------------------------------
@@ -187,6 +230,13 @@ def analyze_antikopas(
 
     raw_index = calculate_similarity_index(
         document_results
+    )
+
+    _report_analysis_progress(
+        progress_callback,
+        96,
+        "Memeriksa sitasi",
+        "Memeriksa bagian dan bukti sumber yang mengandung sitasi.",
     )
 
     # ----------------------------------------------
@@ -206,6 +256,13 @@ def analyze_antikopas(
 
     index_result = calculate_similarity_index(
         eligible_results
+    )
+
+    _report_analysis_progress(
+        progress_callback,
+        98,
+        "Menyiapkan ringkasan hasil",
+        "Perhitungan akhir selesai. Hasil siap disimpan dan dibuatkan laporan.",
     )
 
     # Perhitungan tetap menggunakan persentase

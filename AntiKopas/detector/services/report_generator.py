@@ -422,6 +422,7 @@ def collect_source_evidence(source, chunks):
                 "text_scope": (
                     match.get("text_scope")
                     or match.get("source_text_scope")
+                    or source.get("text_scope")
                 ),
             })
 
@@ -583,8 +584,8 @@ def build_styles():
     styles["note"] = ParagraphStyle(
         "AKNote",
         parent=styles["body"],
-        fontSize=8.3,
-        leading=13,
+        fontSize=8,
+        leading=11,
         textColor=MUTED,
     )
 
@@ -622,7 +623,7 @@ def draw_page_decoration(canvas, doc):
     canvas.drawRightString(
         PAGE_WIDTH - RIGHT_MARGIN,
         PAGE_HEIGHT - 17 * mm,
-        "SEMANTIC SIMILARITY REPORT",
+        "LAPORAN HASIL PEMERIKSAAN",
     )
 
     canvas.setStrokeColor(BORDER)
@@ -640,7 +641,7 @@ def draw_page_decoration(canvas, doc):
     canvas.drawString(
         LEFT_MARGIN,
         12 * mm,
-        "AntiKopas | Analisis Kemiripan Semantik",
+        "AntiKopas | Laporan Pemeriksaan",
     )
 
     canvas.drawRightString(
@@ -703,24 +704,14 @@ def make_progress_bar(percent):
 
 def make_detail_table(
     title,
-    total_chunks,
-    matched_chunks,
     source_count,
-    model_name,
     styles,
 ):
     data = [
         ("Judul Dokumen", title),
-        ("Total Segmen", str(total_chunks)),
-        ("Segmen Cocok", str(matched_chunks)),
         ("Sumber Terdeteksi", str(source_count)),
-        ("Model Embedding", model_name),
         (
-            "Model Validasi",
-            "Academic CrossEncoder V2",
-        ),
-        (
-            "Waktu Laporan",
+            "Waktu Pemeriksaan",
             datetime.now().strftime(
                 "%d-%m-%Y %H:%M"
             ),
@@ -812,14 +803,10 @@ def make_evidence_table(item, styles):
         MAX_EVIDENCE_CHARACTERS,
     )
 
-    chunk_index = safe_text(
-        item.get("chunk_index")
-    )
-
     rows = [
         [
             Paragraph(
-                f"<b>Segmen Dokumen {chunk_index}</b>",
+                "<b>Cuplikan Dokumen</b>",
                 styles["label"],
             )
         ],
@@ -908,6 +895,30 @@ def make_evidence_table(item, styles):
     return table
 
 
+def source_scope_label(value):
+    """Ubah metadata cakupan sumber menjadi label yang mudah dipahami."""
+
+    scope = (
+        readable_text(value)
+        .casefold()
+        .replace("-", "_")
+        .replace(" ", "_")
+    )
+
+    if scope in {
+        "full_text",
+        "fulltext",
+        "full_text_accessible",
+        "fulltext_success",
+    }:
+        return "Teks lengkap"
+
+    if scope in {"abstract", "abstract_only"}:
+        return "Abstrak"
+
+    return ""
+
+
 def add_evidence(elements, evidence, styles):
     if not evidence:
         return
@@ -930,41 +941,17 @@ def add_evidence(elements, evidence, styles):
             make_evidence_table(item, styles)
         )
 
-        model_name = item.get(
-            "embedding_model",
-            "Embedding model tidak diketahui",
+        scope_label = source_scope_label(
+            item.get("text_scope")
         )
 
-        embedding_score = item.get(
-            "embedding_score"
-        )
-
-        cross_score = item.get(
-            "cross_score"
-        )
-
-        score_parts = []
-
-        if embedding_score is not None:
-            score_parts.append(
-                f"{safe_text(model_name)}: "
-                f"{safe_number(embedding_score):.4f}"
-            )
-
-        if cross_score is not None:
-            score_parts.append(
-                "Academic V2 (raw score): "
-                f"{safe_number(cross_score):.4f}"
-            )
-
-        if score_parts:
+        if scope_label:
             elements.append(
                 Spacer(1, 2 * mm)
             )
-
             elements.append(
                 Paragraph(
-                    " | ".join(score_parts),
+                    f"<b>Cakupan sumber:</b> {safe_text(scope_label)}",
                     styles["small"],
                 )
             )
@@ -1030,10 +1017,6 @@ def generate_report(
         int(safe_number(matched_chunks)),
     )
 
-    model_name = detect_pipeline_model(
-        chunks
-    )
-
     doc = SimpleDocTemplate(
         str(output_path),
         pagesize=A4,
@@ -1041,9 +1024,9 @@ def generate_report(
         leftMargin=LEFT_MARGIN,
         topMargin=TOP_MARGIN,
         bottomMargin=BOTTOM_MARGIN,
-        title="AntiKopas Semantic Similarity Report",
+        title="AntiKopas - Laporan Hasil Pemeriksaan",
         author="AntiKopas",
-        subject="Analisis Kemiripan Semantik Dokumen",
+        subject="Laporan Hasil Pemeriksaan Kemiripan Dokumen",
     )
 
     elements = []
@@ -1065,7 +1048,7 @@ def generate_report(
 
     elements.append(
         Paragraph(
-            "SEMANTIC SIMILARITY REPORT",
+            "Analisis Kemiripan Semantik",
             styles["subtitle"],
         )
     )
@@ -1092,7 +1075,7 @@ def generate_report(
 
     elements.append(
         Paragraph(
-            "Cakupan Segmen dengan Kemiripan Semantik",
+            "Cakupan Kemiripan Semantik",
             styles["score_label"],
         )
     )
@@ -1111,13 +1094,13 @@ def generate_report(
 
     elements.append(
         Paragraph(
-            "Similarity Index menunjukkan "
-            "proporsi segmen dokumen yang "
-            "memiliki kecocokan semantik "
-            "dengan sumber akademik yang "
-            "lolos seleksi sistem. "
-            "Angka ini bukan persentase "
-            "plagiarisme atau bukti penyalinan.",
+            "Persentase ini menunjukkan bagian dokumen yang "
+            "memiliki kecocokan makna dengan sumber akademik "
+            "yang ditemukan. Persentase per sumber dapat saling "
+            "tumpang tindih dan tidak dijumlahkan untuk memperoleh "
+            "nilai keseluruhan. Angka ini bukan persentase "
+            "plagiarisme atau bukti penyalinan; setiap temuan perlu "
+            "ditinjau berdasarkan konteks dan sitasi.",
             styles["note"],
         )
     )
@@ -1136,10 +1119,7 @@ def generate_report(
     elements.append(
         make_detail_table(
             title=title,
-            total_chunks=total_chunks,
-            matched_chunks=matched_chunks,
             source_count=len(valid_sources),
-            model_name=model_name,
             styles=styles,
         )
     )
@@ -1248,40 +1228,6 @@ def generate_report(
                     )
                 )
 
-            count = stats.get(
-                "matched_chunks"
-            )
-
-            if count is not None:
-                elements.append(
-                    Paragraph(
-                        "<b>Segmen cocok:</b> "
-                        f"{safe_text(count)}",
-                        styles["body"],
-                    )
-                )
-
-            indices = stats.get(
-                "matched_chunk_indices"
-            )
-
-            if isinstance(
-                indices,
-                (list, tuple),
-            ) and indices:
-                elements.append(
-                    Paragraph(
-                        "<b>Indeks segmen:</b> "
-                        + safe_text(
-                            ", ".join(
-                                str(i)
-                                for i in indices
-                            )
-                        ),
-                        styles["small"],
-                    )
-                )
-
         evidence = collect_source_evidence(
             source,
             chunks,
@@ -1303,75 +1249,6 @@ def generate_report(
                 width="100%",
                 thickness=0.7,
                 color=BORDER,
-            )
-        )
-
-    # --------------------------------------
-    # E. CATATAN METODOLOGI
-    # --------------------------------------
-
-    elements.append(
-        section_heading(
-            "METODOLOGI DAN INTERPRETASI",
-            styles,
-        )
-    )
-
-    notes = [
-        (
-            "AntiKopas mencari sumber akademik "
-            "melalui OpenAlex, kemudian "
-            "membandingkan segmen dokumen "
-            "dengan teks sumber yang tersedia."
-        ),
-        (
-            "Cloudflare BGE-M3 digunakan "
-            "untuk pencarian kandidat "
-            "kemiripan semantik pada "
-            "konfigurasi pemindaian saat ini."
-        ),
-        (
-            "Academic CrossEncoder V2 "
-            "digunakan untuk memvalidasi "
-            "pasangan kandidat."
-        ),
-        (
-            "Skor BGE-M3 merupakan nilai "
-            "cosine similarity. Skor Academic "
-            "V2 merupakan raw score model. "
-            "Keduanya bukan persentase plagiarisme."
-        ),
-        (
-            "Cakupan per sumber dapat saling "
-            "tumpang tindih. Persentase antar "
-            "sumber tidak boleh dijumlahkan "
-            "untuk menghasilkan Similarity Index."
-        ),
-        (
-            "Bukti sumber dapat berasal "
-            "dari abstrak maupun teks lengkap "
-            "yang berhasil diakses sistem. "
-            "Ketersediaan teks setiap sumber "
-            "bisa berbeda."
-        ),
-        (
-            "Kemiripan makna tidak otomatis "
-            "menunjukkan penyalinan atau "
-            "pelanggaran integritas akademik. "
-            "Hasil perlu ditinjau manusia "
-            "dengan mempertimbangkan konteks "
-            "dan sitasi."
-        ),
-    ]
-
-    for number, note in enumerate(
-        notes,
-        start=1,
-    ):
-        elements.append(
-            Paragraph(
-                f"{number}. {safe_text(note)}",
-                styles["note"],
             )
         )
 
@@ -1424,11 +1301,6 @@ def generate_report(
     print(
         "[AntiKopas Report] Sumber:",
         len(valid_sources),
-    )
-
-    print(
-        "[AntiKopas Report] Embedding:",
-        model_name,
     )
 
     return str(output_path)

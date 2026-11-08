@@ -32,6 +32,7 @@ function App() {
   const [busy, setBusy] = useState(false)
   const [analysisBusy, setAnalysisBusy] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
+  const [analysisStage, setAnalysisStage] = useState('Menunggu proses')
   const [message, setMessage] = useState('')
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -67,13 +68,48 @@ function App() {
     window.history.pushState({ antikopas: true, view }, '', window.location.href)
   }
 
-  useEffect(() => {
-    if (!analysisBusy) return undefined
-    const timer = window.setInterval(() => {
-      setAnalysisProgress((current) => Math.min(current + Math.ceil(Math.random() * 7), 92))
-    }, 700)
-    return () => window.clearInterval(timer)
-  }, [analysisBusy])
+  function friendlyAnalysisStage(stage) {
+    const value = String(stage || '').trim()
+    const normalized = value.toLowerCase()
+
+    if (!value) return 'Sedang memproses dokumen'
+    if (normalized.includes('gagal')) return 'Pemeriksaan gagal'
+    if (normalized.includes('selesai')) return 'Pemeriksaan selesai'
+    if (normalized.includes('sitasi')) return 'Memeriksa sitasi'
+    if (normalized.includes('laporan') || normalized.includes('report')) return 'Menyiapkan laporan'
+    if (normalized.includes('cross') || normalized.includes('academic') || normalized.includes('validasi')) {
+      return 'Memvalidasi kecocokan semantik'
+    }
+    if (normalized.includes('full text') || normalized.includes('fulltext') || normalized.includes('pdf jurnal')) {
+      return 'Memeriksa isi sumber akademik'
+    }
+    if (
+      normalized.includes('embedding') ||
+      normalized.includes('bge') ||
+      normalized.includes('membandingkan') ||
+      normalized.includes('semantik')
+    ) {
+      return 'Membandingkan isi dokumen dengan sumber akademik'
+    }
+    if (
+      normalized.includes('openalex') ||
+      normalized.includes('literatur') ||
+      normalized.includes('sumber akademik') ||
+      normalized.includes('mencari sumber')
+    ) {
+      return 'Mencari sumber akademik'
+    }
+    if (
+      normalized.includes('dokumen') ||
+      normalized.includes('membaca') ||
+      normalized.includes('preprocess') ||
+      normalized.includes('persiapan')
+    ) {
+      return 'Membaca dan menyiapkan dokumen'
+    }
+
+    return value
+  }
 
   
   // Popup ketika pencarian jurnal OpenAlex gagal.
@@ -452,6 +488,29 @@ function App() {
     }
   }, [])
 
+  const loadActiveProgress = useCallback(async () => {
+    try {
+      const data = await api.listAnalyses({
+        page: 1,
+        pageSize: 10,
+        status: 'processing',
+      })
+
+      const activeJob = (data.results || [])[0]
+      if (!activeJob) return
+
+      const progress = Number(activeJob.progress_percent)
+      if (Number.isFinite(progress)) {
+        setAnalysisProgress(Math.max(0, Math.min(progress, 100)))
+      }
+
+      setAnalysisStage(friendlyAnalysisStage(activeJob.progress_stage))
+    } catch {
+      // Progress hanya informasi tampilan.
+      // Error utama tetap ditangani oleh request analisis.
+    }
+  }, [])
+
   // Periksa identitas pengguna melalui API setelah login atau saat sesi dipulihkan.
   useEffect(() => {
     if (!token) return
@@ -506,6 +565,7 @@ function App() {
     setBusy(true)
     setAnalysisBusy(false)
     setAnalysisProgress(0)
+    setAnalysisStage('Menunggu proses')
     setMessage('')
     try {
       const data = await api.login(login.username, login.password)
@@ -556,20 +616,25 @@ function App() {
       return
     }
     setAnalysisBusy(true)
-    setAnalysisProgress(5)
+    setAnalysisProgress(0)
+    setAnalysisStage('Mengirim dokumen')
     setMessage('Dokumen sedang dianalisis. Proses ini dapat membutuhkan waktu.')
     let completed = false
-    const progressTimer = window.setInterval(() => {
-      setAnalysisProgress((currentProgress) => Math.min(currentProgress + 1, 92))
-    }, 350)
+
+    const progressRefreshTimer = window.setInterval(() => {
+      loadActiveProgress()
+    }, 1200)
+
     const statsRefreshTimer = window.setInterval(() => {
       loadAnalyses()
       loadStats()
     }, 1500)
+
     try {
       const data = await api.detect(form.title, form.file)
       completed = true
       setAnalysisProgress(100)
+      setAnalysisStage('Pemeriksaan selesai')
       setResult(data)
       setMessage('Analisis selesai.')
       setForm({ title: '', file: null })
@@ -577,13 +642,18 @@ function App() {
       await loadAnalyses()
       await loadStats()
     } catch (error) {
+      setAnalysisStage('Pemeriksaan gagal')
       setMessage(error.message)
     } finally {
-      window.clearInterval(progressTimer)
+      window.clearInterval(progressRefreshTimer)
       window.clearInterval(statsRefreshTimer)
       setAnalysisBusy(false)
+
       if (completed) {
-        window.setTimeout(() => setAnalysisProgress(0), 900)
+        window.setTimeout(() => {
+          setAnalysisProgress(0)
+          setAnalysisStage('Menunggu proses')
+        }, 900)
       } else {
         setAnalysisProgress(0)
       }
@@ -632,11 +702,47 @@ function App() {
     }
   }
 
-  async function handleOpenReport(url) {
-    const reportWindow = window.open('', '_blank')
+  function createReportFilename(title, analysisId) {
+    const safeTitle = String(title || 'Hasil-Analisis')
+      .normalize('NFKD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 70)
+
+    const identity = analysisId ? `AK-${analysisId}` : 'AK'
+
+    return `AntiKopas_Laporan_${identity}_${safeTitle || 'Hasil-Analisis'}.pdf`
+  }
+
+  async function handleDownloadReport(url, title, analysisId) {
     try {
       const blob = await api.getReport(url)
       const objectUrl = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+
+      link.href = objectUrl
+      link.download = createReportFilename(title, analysisId)
+
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+
+      window.setTimeout(() => {
+        URL.revokeObjectURL(objectUrl)
+      }, 1000)
+    } catch (error) {
+      setMessage(error.message)
+    }
+  }
+
+  async function handleOpenReport(url) {
+    const reportWindow = window.open('', '_blank')
+
+    try {
+      const blob = await api.getReport(url)
+      const objectUrl = URL.createObjectURL(blob)
+
       if (reportWindow) reportWindow.location.href = objectUrl
       else window.open(objectUrl, '_blank')
     } catch (error) {
@@ -765,6 +871,10 @@ function App() {
   return (
     <main className="dashboard-reference">
       <nav className="dashboard-reference-nav">
+        <div className="dashboard-reference-brand">
+          <img className="brand-image dashboard-reference-logo" src={logo} alt="Logo AntiKopas" />
+          <span>Anti<span>Kopas</span></span>
+        </div>
         <div className="dashboard-reference-actions">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <span className="dashboard-reference-avatar" aria-label={`Akun ${currentUser.username}`}>{currentUser.username.charAt(0).toUpperCase()}</span>
@@ -778,32 +888,282 @@ function App() {
           <p>Unggah file untuk mendapatkan analisis kemiripan dan laporan.</p>
         </div>
         <div className="dashboard-reference-grid">
+          <div className="dashboard-reference-left-column">
           <form className="dashboard-reference-card dashboard-reference-upload" onSubmit={handleUpload}>
             <div className="dashboard-reference-card-heading"><h2>Analisis baru</h2><LineIcon type="file" /></div>
+
+            <div className="retention-warning">
+              <span className="retention-warning-icon">!</span>
+              <div>
+                <strong>Hasil disimpan sementara selama 2 jam</strong>
+                <p>
+                  Dokumen, hasil analisis, dan laporan PDF akan dihapus otomatis setelah masa penyimpanan berakhir.
+                  Unduh laporan setelah analisis selesai agar hasil tetap tersimpan di perangkat Anda.
+                </p>
+              </div>
+            </div>
+
             <label className="dashboard-reference-label">Judul dokumen
               <span className="dashboard-reference-title-input"><input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Contoh: Analisis Kuantitatif Mikrobiologi" /><LineIcon type="pencil" /></span>
             </label>
-            <label className="dashboard-reference-label dashboard-reference-file-label">File dokumen
-              <span className="dashboard-reference-dropzone">
-                <input type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx" onChange={(e) => setForm({ ...form, file: e.target.files[0] || null })} />
-                <span className="dashboard-reference-upload-icon"><LineIcon type="upload" /></span>
-                <strong>{form.file ? form.file.name : <>Tarik & lepas file di sini, atau <u>Cari file</u></>}</strong>
-                <small>Mendukung format PDF & Word (.docx)</small>
-              </span>
-            </label>
+            <div className="dashboard-reference-label dashboard-reference-file-label">
+              <span>File dokumen</span>
+              {form.file ? (
+                <div className="dashboard-selected-file">
+                  <div className="dashboard-selected-file-info">
+                    <span className="dashboard-selected-file-icon"><LineIcon type="file" /></span>
+                    <div>
+                      <strong>{form.file.name}</strong>
+                      <small>{(form.file.size / (1024 * 1024)).toFixed(2)} MB · File siap dianalisis</small>
+                    </div>
+                  </div>
+                  <div className="dashboard-selected-file-actions">
+                    <label className={`dashboard-file-change${analysisBusy ? ' is-disabled' : ''}`}>
+                      Ubah file
+                      <input
+                        type="file"
+                        accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
+                        disabled={analysisBusy}
+                        onClick={(event) => { event.currentTarget.value = '' }}
+                        onChange={(event) => setForm({ ...form, file: event.target.files[0] || null })}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="dashboard-file-remove"
+                      disabled={analysisBusy}
+                      onClick={() => setForm({ ...form, file: null })}
+                    >
+                      Hapus file
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <label className="dashboard-reference-dropzone">
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
+                    disabled={analysisBusy}
+                    onChange={(event) => setForm({ ...form, file: event.target.files[0] || null })}
+                  />
+                  <span className="dashboard-reference-upload-icon"><LineIcon type="upload" /></span>
+                  <strong>Tarik & lepas file di sini, atau <u>Cari file</u></strong>
+                  <small>Mendukung format PDF & Word (.docx)</small>
+                </label>
+              )}
+            </div>
             <button className="dashboard-reference-submit" disabled={analysisBusy}>{analysisBusy ? 'Menganalisis...' : <>Mulai analisis <LineIcon type="search" /></>}</button>
-            {(analysisBusy && form.file || analysisProgress > 0 && form.file) && <div className="analysis-loading" role="status" aria-live="polite"><div className="loading-heading"><span className="loading-spinner"></span><strong>{analysisProgress === 100 ? 'Analisis selesai' : 'Sedang menganalisis dokumen'}</strong><b className="loading-percentage">{analysisProgress}%</b></div><p>Dokumen sedang dibaca dan dibandingkan dengan sumber akademik.</p><div className="loading-track"><i style={{ width: `${analysisProgress}%` }}></i></div><small>{analysisProgress === 100 ? 'Analisis berhasil diselesaikan.' : 'Mohon tunggu, proses ini dapat membutuhkan waktu.'}</small></div>}
+            {(analysisBusy || analysisProgress > 0) && <div className="analysis-loading" role="status" aria-live="polite"><div className="loading-heading"><span className="loading-spinner"></span><strong>{analysisProgress === 100 ? 'Analisis selesai' : 'Sedang menganalisis dokumen'}</strong><b className="loading-percentage">{analysisProgress}%</b></div><p>{analysisStage}</p><div className="loading-track"><i style={{ width: `${analysisProgress}%` }}></i></div><small>{analysisProgress === 100 ? 'Analisis berhasil diselesaikan.' : 'Progress mengikuti tahapan pemeriksaan yang sedang dikerjakan.'}</small></div>}
             {message && <p className="notice">{message}</p>}
           </form>
+
+          <div className="dashboard-reference-support-grid">
+            <section className="dashboard-reference-card dashboard-reference-process">
+              <div className="dashboard-reference-card-heading"><h2>Ringkasan proses</h2><LineIcon type="search" /></div>
+              <div className="dashboard-process-list">
+                <div className="dashboard-process-item"><b>1</b><div><strong>Baca dokumen</strong><span>Menyiapkan isi dokumen.</span></div></div>
+                <div className="dashboard-process-item"><b>2</b><div><strong>Cari sumber akademik</strong><span>Menelusuri sumber yang relevan.</span></div></div>
+                <div className="dashboard-process-item"><b>3</b><div><strong>Periksa kemiripan semantik</strong><span>Membandingkan makna dan konteks.</span></div></div>
+                <div className="dashboard-process-item"><b>4</b><div><strong>Siapkan hasil</strong><span>Menyusun ringkasan dan laporan.</span></div></div>
+              </div>
+            </section>
+
+            <section className="dashboard-reference-card dashboard-reference-guide">
+              <div className="dashboard-reference-card-heading"><h2>Panduan singkat</h2><LineIcon type="evidence" /></div>
+              <ul className="dashboard-guide-list">
+                <li>Gunakan judul yang jelas dan sesuai isi dokumen.</li>
+                <li>Unggah file PDF atau DOCX maksimal 25 MB.</li>
+                <li>Pastikan teks dokumen dapat dibaca dengan baik.</li>
+                <li>Unduh laporan setelah pemeriksaan selesai.</li>
+              </ul>
+            </section>
+          </div>
+          </div>
+
           <section className="dashboard-reference-card dashboard-reference-history">
             <div className="dashboard-reference-card-heading"><h2>Riwayat analisis</h2><button className="dashboard-reference-refresh" onClick={() => { loadAnalyses(); loadStats() }}><LineIcon type="refresh" /> Muat ulang</button></div>
             <div className="dashboard-reference-filters"><input value={historyQuery} onChange={(e) => { setHistoryQuery(e.target.value); setHistoryMeta({ ...historyMeta, page: 1 }) }} placeholder="Cari judul analisis..." /><select value={historyStatus} onChange={(e) => { setHistoryStatus(e.target.value); setHistoryMeta({ ...historyMeta, page: 1 }) }}><option value="">Semua status</option><option value="processing">Diproses</option><option value="completed">Selesai</option><option value="failed">Gagal</option></select></div>
-            {analyses.length === 0 ? <div className="dashboard-reference-empty"><div className="dashboard-reference-empty-art"><svg width="100" height="100" viewBox="0 0 100 100" fill="none" aria-hidden="true"><rect x="25" y="15" width="45" height="60" rx="4" fill="white" stroke="#1e1b4b" strokeWidth="2.5"/><line x1="35" y1="30" x2="60" y2="30" stroke="#f27a61" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="40" x2="60" y2="40" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="50" x2="60" y2="50" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><line x1="35" y1="60" x2="50" y2="60" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round"/><circle cx="55" cy="55" r="14" fill="#fcfaf8" stroke="#1e1b4b" strokeWidth="3"/><line x1="65" y1="65" x2="78" y2="78" stroke="#f27a61" strokeWidth="6" strokeLinecap="round"/></svg></div><h3>{historyQuery || historyStatus ? 'Tidak ada hasil' : 'Belum ada analisis.'}</h3><p>{historyQuery || historyStatus ? 'Coba ubah kata kunci atau filter.' : 'Dokumen yang Anda periksa akan muncul di sini.'}</p></div> : <div className="history">{analyses.map((item) => <div className="history-item" key={item.id}><div><strong>{item.title}</strong><span>{item.status === 'completed' ? 'Selesai' : item.status === 'processing' || item.status === 'pending' ? 'Diproses' : 'Gagal'}</span></div><b>{item.similarity_index.toFixed(2)}%</b><div className="history-actions"><button className="history-action" onClick={() => handleRename(item)}>Edit</button>{item.report_url && <button className="history-action" onClick={() => handleOpenReport(item.report_url)}>Report</button>}<button className="delete-button" onClick={() => handleDelete(item.id)} aria-label={`Hapus ${item.title}`}>Hapus</button></div></div>)}</div>}
+            {analyses.length === 0 ? (
+              <div className="dashboard-reference-empty">
+                <div className="dashboard-reference-empty-art">
+                  <svg width="100" height="100" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+                    <rect x="25" y="15" width="45" height="60" rx="4" fill="white" stroke="#1e1b4b" strokeWidth="2.5" />
+                    <line x1="35" y1="30" x2="60" y2="30" stroke="#f27a61" strokeWidth="3" strokeLinecap="round" />
+                    <line x1="35" y1="40" x2="60" y2="40" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round" />
+                    <line x1="35" y1="50" x2="60" y2="50" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round" />
+                    <line x1="35" y1="60" x2="50" y2="60" stroke="#fbd0c8" strokeWidth="3" strokeLinecap="round" />
+                    <circle cx="55" cy="55" r="14" fill="#fcfaf8" stroke="#1e1b4b" strokeWidth="3" />
+                    <line x1="65" y1="65" x2="78" y2="78" stroke="#f27a61" strokeWidth="6" strokeLinecap="round" />
+                  </svg>
+                </div>
+                <h3>{historyQuery || historyStatus ? 'Tidak ada hasil' : 'Belum ada analisis.'}</h3>
+                <p>{historyQuery || historyStatus ? 'Coba ubah kata kunci atau filter.' : 'Dokumen yang Anda periksa akan muncul di sini.'}</p>
+              </div>
+            ) : (
+              <div className="history">
+                {analyses.map((item) => (
+                  <div className="history-item" key={item.id}>
+                    <div className="history-item-icon">
+                      <LineIcon type="file" />
+                    </div>
+
+                    <div className="history-item-main">
+                      <strong>{item.title}</strong>
+                      <span className={`history-status history-status-${item.status}`}>
+                        {item.status === 'completed'
+                          ? 'Selesai'
+                          : item.status === 'processing' || item.status === 'pending'
+                            ? 'Diproses'
+                            : 'Gagal'}
+                      </span>
+                    </div>
+
+                    <b className="history-score">
+                      {Number(item.similarity_index).toFixed(2)}%
+                    </b>
+
+                    <div className="history-actions">
+                      {item.report_url && (
+                        <>
+                          <button
+                            type="button"
+                            className="history-action"
+                            onClick={() => handleOpenReport(item.report_url)}
+                          >
+                            Lihat
+                          </button>
+
+                          <button
+                            type="button"
+                            className="history-action"
+                            onClick={() => handleDownloadReport(item.report_url, item.title, item.id)}
+                          >
+                            Unduh
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        type="button"
+                        className="delete-button"
+                        onClick={() => handleDelete(item.id)}
+                        aria-label={`Hapus ${item.title}`}
+                      >
+                        Hapus
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             {historyMeta.totalPages > 1 && <div className="dashboard-reference-pagination"><button disabled={historyMeta.page <= 1} onClick={() => setHistoryMeta({ ...historyMeta, page: historyMeta.page - 1 })}>Sebelumnya</button><span>Halaman {historyMeta.page} dari {historyMeta.totalPages}</span><button disabled={historyMeta.page >= historyMeta.totalPages} onClick={() => setHistoryMeta({ ...historyMeta, page: historyMeta.page + 1 })}>Berikutnya</button></div>}
           </section>
         </div>
-        {stats && <section className="dashboard-reference-stats"><div><strong>{stats.total_analyses}</strong><span>Total analisis</span></div><div><strong>{stats.completed_analyses}</strong><span>Selesai</span></div><div><strong>{stats.processing_analyses}</strong><span>Diproses</span></div><div><strong>{Number(stats.average_similarity).toFixed(2)}%</strong><span>Rata-rata kemiripan</span></div></section>}
-        {result && <section className="panel result"><div><p className="eyebrow">HASIL TERBARU</p><h2>{result.title}</h2><div className="score">{Number(result.similarity_index).toFixed(2)}<span>%</span></div><p className="muted">{result.matched_chunks === 0 ? `Tidak ada bagian dokumen yang menunjukkan kemiripan dari ${result.total_chunks} bagian yang diperiksa.` : `${result.matched_chunks} dari ${result.total_chunks} bagian dokumen menunjukkan kemiripan.`}</p>{result.diagnostic_message && <p className="notice diagnostic">{result.diagnostic_message}</p>}{result.source_similarities?.length > 0 && <div className="source-summary"><h3>Sumber yang cocok</h3>{result.source_similarities.slice(0, 5).map((source) => <div className="source-summary-item" key={source.openalex_id || source.doi || source.title}><div><strong>{source.title}</strong><span>{source.matched_chunks} bagian · {Number(source.similarity_percentage).toFixed(2)}%</span></div>{source.url && <a href={source.url} target="_blank" rel="noreferrer">Buka sumber</a>}</div>)}</div>}</div><button className="button" onClick={() => handleOpenReport(result.report_url)}>Buka report PDF</button></section>}
+        {stats && (
+          <section className="dashboard-reference-stats">
+            <div>
+              <strong>{stats.total_analyses}</strong>
+              <span>Total analisis</span>
+            </div>
+            <div>
+              <strong>{stats.completed_analyses}</strong>
+              <span>Selesai</span>
+            </div>
+            <div>
+              <strong>{stats.processing_analyses}</strong>
+              <span>Diproses</span>
+            </div>
+            <div>
+              <strong>{Number(stats.average_similarity).toFixed(2)}%</strong>
+              <span>Rata-rata kemiripan</span>
+            </div>
+          </section>
+        )}
+
+        {result && (
+          <section className="panel result">
+            <div>
+              <p className="eyebrow">HASIL TERBARU</p>
+              <h2>{result.title}</h2>
+
+              <div className="score">
+                {Number(result.similarity_index).toFixed(2)}
+                <span>%</span>
+              </div>
+
+              <p className="muted">
+                {result.diagnostic_code === 'no_eligible_segments'
+                  ? 'Dokumen belum memiliki bagian yang dapat dinilai pada pemeriksaan ini. Nilai 0% tidak otomatis berarti dokumen bebas kemiripan.'
+                  : result.diagnostic_code === 'self_match_excluded'
+                    ? 'Sumber yang identik dengan dokumen tidak disertakan agar hasil pemeriksaan tetap relevan.'
+                    : result.diagnostic_code === 'no_sources'
+                      ? 'Belum ditemukan sumber akademik yang memenuhi kriteria untuk dibandingkan.'
+                      : Number(result.similarity_index) > 0
+                        ? 'Ditemukan kecocokan semantik dengan sumber akademik. Tinjau daftar sumber dan laporan untuk melihat konteks kemiripannya.'
+                        : 'Tidak ditemukan kecocokan yang memenuhi kriteria pemeriksaan pada sumber akademik yang berhasil ditelusuri.'}
+              </p>
+
+              {result.source_similarities?.length > 0 && (
+                <div className="source-summary">
+                  <h3>Sumber yang cocok</h3>
+
+                  {result.source_similarities.slice(0, 5).map((source) => (
+                    <div
+                      className="source-summary-item"
+                      key={source.openalex_id || source.doi || source.title}
+                    >
+                      <div>
+                        <strong>{source.title}</strong>
+                        <span>
+                          Cakupan kecocokan: {Number(source.similarity_percentage).toFixed(2)}%
+                        </span>
+                      </div>
+
+                      {source.url && (
+                        <a href={source.url} target="_blank" rel="noreferrer">
+                          Buka sumber
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {result.report_url && (
+              <div
+                style={{
+                  display: 'flex',
+                  gap: '10px',
+                  flexWrap: 'wrap',
+                  marginTop: '20px',
+                }}
+              >
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() => handleOpenReport(result.report_url)}
+                >
+                  Buka laporan
+                </button>
+
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() =>
+                    handleDownloadReport(
+                      result.report_url,
+                      result.title,
+                      result.analysis_id,
+                    )
+                  }
+                >
+                  Unduh PDF
+                </button>
+              </div>
+            )}
+          </section>
+        )}
         {editingAnalysis && <div className="edit-modal-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditingAnalysis(null) }}><form className="edit-modal" role="dialog" aria-modal="true" aria-labelledby="edit-analysis-title" onSubmit={handleSaveRename}><div className="edit-modal-icon"><LineIcon type="pencil" /></div><h2 id="edit-analysis-title">Edit judul analisis</h2><p>Perbarui judul dokumen agar lebih mudah ditemukan di riwayat.</p><label>Judul dokumen<input autoFocus value={editingAnalysis.title} onChange={(event) => setEditingAnalysis({ ...editingAnalysis, title: event.target.value, error: '' })} maxLength={500} /></label>{editingAnalysis.error && <small className="edit-modal-error">{editingAnalysis.error}</small>}<div className="edit-modal-actions"><button type="button" className="edit-modal-cancel" onClick={() => setEditingAnalysis(null)}>Batal</button><button type="submit" className="edit-modal-save">Simpan perubahan</button></div></form></div>}
       </section>
     </main>

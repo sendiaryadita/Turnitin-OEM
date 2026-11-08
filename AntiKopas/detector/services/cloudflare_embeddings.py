@@ -191,6 +191,8 @@ class CloudflareBGEEmbedding:
         batch_size=16,
         convert_to_tensor=True,
         show_progress_bar=False,
+        progress_callback=None,
+        progress_label="Embedding teks",
     ):
         """
         Antarmuka kompatibel dengan penggunaan
@@ -200,6 +202,10 @@ class CloudflareBGEEmbedding:
         Keluaran:
         - torch.Tensor jika convert_to_tensor=True
         - numpy.ndarray jika False
+
+        progress_callback bersifat opsional. Jika diberikan,
+        callback menerima dictionary progres setelah setiap batch
+        berhasil. Tanpa callback, perilaku lama tetap sama.
         """
 
         single_text = isinstance(texts, str)
@@ -257,12 +263,37 @@ class CloudflareBGEEmbedding:
             batch_number = (
                 start // effective_batch_size
             ) + 1
+            completed_items = min(
+                start + len(batch),
+                len(texts),
+            )
 
             print(
                 f"[BGE-M3] Batch "
                 f"{batch_number}/{total_batches} "
                 "berhasil."
             )
+
+            # Progress hanya dilaporkan setelah request batch
+            # berhasil. Kegagalan callback tidak boleh
+            # menggagalkan proses embedding yang sudah berjalan.
+            if callable(progress_callback):
+                progress_data = {
+                    "event": "embedding_batch_completed",
+                    "stage": str(progress_label),
+                    "completed_batches": batch_number,
+                    "total_batches": total_batches,
+                    "completed_items": completed_items,
+                    "total_items": len(texts),
+                    "fraction": completed_items / len(texts),
+                }
+                try:
+                    progress_callback(progress_data)
+                except Exception as error:
+                    print(
+                        "[BGE-M3] Peringatan: callback progress gagal:",
+                        type(error).__name__,
+                    )
 
         embeddings = np.concatenate(
             all_vectors,

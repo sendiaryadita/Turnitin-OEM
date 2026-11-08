@@ -137,8 +137,14 @@
         animation: ak-brand-appear .6s ease-out both;
     }
 
-    #header .ak-brand-anti { color: #ffffff; }
-    #header .ak-brand-kopas { color: #ff816f; }
+    #header .ak-brand-anti {
+        color: #ffffff;
+    }
+
+    #header .ak-brand-kopas {
+        color: #ff816f;
+    }
+
     #header .ak-brand-role {
         margin-left: 4px;
         padding-left: 12px;
@@ -153,9 +159,13 @@
         text-decoration: none;
         transition: color .2s ease;
     }
-    #user-tools a:hover { color: #ffab98; }
 
-    #content h1, #content h2 {
+    #user-tools a:hover {
+        color: #ffab98;
+    }
+
+    #content h1,
+    #content h2 {
         letter-spacing: -.35px;
     }
 
@@ -186,9 +196,11 @@
         text-decoration: none;
         font-weight: 600;
     }
-    #nav-sidebar .addlink { display: none; }
 
-    /* Active navigation is visible in light and dark themes. */
+    #nav-sidebar .addlink {
+        display: none;
+    }
+
     #nav-sidebar .current-model {
         background: var(--selected-bg);
         box-shadow: inset 4px 0 #c74c3c;
@@ -199,7 +211,6 @@
         font-weight: 800;
     }
 
-    /* Model change-list headings: stronger contrast and hierarchy. */
     #changelist #result_list thead th,
     #changelist #result_list thead th a,
     #changelist #result_list thead th span {
@@ -211,7 +222,6 @@
         letter-spacing: .012em;
     }
 
-    /* Breadcrumbs and filter targets are easier to read/click. */
     div.breadcrumbs,
     div.breadcrumbs a {
         font-size: 14px;
@@ -241,13 +251,13 @@
         letter-spacing: .015em;
         transition: transform .2s ease, background .2s ease;
     }
+
     #content .object-tools a:hover {
         background: #ad3f32;
         color: #ffffff;
         transform: translateY(-2px);
     }
 
-    /* Real empty state for Django model lists without records. */
     #changelist .ak-admin-empty {
         display: flex;
         flex-direction: column;
@@ -304,38 +314,71 @@
     input[type="text"],
     input[type="password"],
     input[type="email"],
-    select, textarea,
+    select,
+    textarea,
     .button,
     input[type="submit"] {
         border-radius: 8px;
     }
 
-    a:focus-visible, button:focus-visible, input:focus-visible {
+    a:focus-visible,
+    button:focus-visible,
+    input:focus-visible {
         outline: 2px solid #f56855;
         outline-offset: 2px;
     }
 
     @keyframes ak-brand-appear {
-        from { opacity: 0; transform: translateY(6px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+            opacity: 0;
+            transform: translateY(6px);
+        }
+
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     @media (max-width: 767px) {
-        #header { padding: 11px 14px; gap: 8px; }
-        #header .ak-brand-name { font-size: 19px; }
-        #header .ak-brand-role { font-size: 11px; }
-        .ak-brand-logo { width: 34px; height: 34px; }
-        #content { min-width: 0; }
+        #header {
+            padding: 11px 14px;
+            gap: 8px;
+        }
+
+        #header .ak-brand-name {
+            font-size: 19px;
+        }
+
+        #header .ak-brand-role {
+            font-size: 11px;
+        }
+
+        .ak-brand-logo {
+            width: 34px;
+            height: 34px;
+        }
+
+        #content {
+            min-width: 0;
+        }
     }
 
     @media (max-width: 420px) {
-        #header .ak-brand-role { display: none; }
+        #header .ak-brand-role {
+            display: none;
+        }
     }
 
     @media (prefers-reduced-motion: reduce) {
-        #header .ak-brand-name { animation: none; }
+        #header .ak-brand-name {
+            animation: none;
+        }
+
         #header .ak-brand-logo,
-        #content .object-tools a { transition: none; }
+        #content .object-tools a {
+            transition: none;
+        }
     }
 </style>
 {% endblock %}

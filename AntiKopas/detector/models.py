@@ -54,6 +54,16 @@ class AnalysisJob(models.Model):
         default=Status.PENDING,
         db_index=True,
     )
+
+        # Progress pemeriksaan dokumen
+    progress_percent = models.PositiveSmallIntegerField(
+        default=0
+    )
+
+    progress_stage = models.CharField(
+        max_length=100,
+        default="Menunggu proses"
+    )
     total_chunks = models.PositiveIntegerField(default=0)
     matched_chunks = models.PositiveIntegerField(default=0)
     similarity_index = models.DecimalField(

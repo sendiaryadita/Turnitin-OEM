@@ -1,5 +1,6 @@
 import math
 import re
+import time
 import unicodedata
 
 from collections import Counter, defaultdict
@@ -59,6 +60,93 @@ MIN_SOURCE_MATCHED_CHUNKS = 2
 MIN_SOURCE_COVERAGE = 0.05
 
 REQUIRE_DOI = True
+
+
+# ==================================================
+# PROGRESS CALLBACK (OPSIONAL)
+# ==================================================
+
+def report_pipeline_progress(
+    progress_callback,
+    percent,
+    stage,
+    message=None,
+):
+    """Kirim progress ke pemanggil tanpa menggagalkan pipeline."""
+    if not callable(progress_callback):
+        return
+
+    try:
+        payload = {
+            "percent": max(0, min(99, int(round(percent)))),
+            "stage": str(stage),
+        }
+        if message:
+            payload["message"] = str(message)
+
+        progress_callback(payload)
+    except Exception as error:
+        print(
+            "[Progress] Peringatan: callback gagal:",
+            type(error).__name__,
+        )
+
+
+def log_stage_timing(label, started_at):
+    """
+    Logging durasi untuk benchmark AK_07.
+    Tidak memengaruhi hasil analisis.
+    """
+    elapsed = time.perf_counter() - started_at
+
+    print(
+        f"[Timing] {label:<28}: "
+        f"{elapsed:.2f} s"
+    )
+
+    return elapsed
+
+
+def build_embedding_progress_callback(
+    progress_callback,
+    start_percent,
+    end_percent,
+    stage,
+):
+    """Petakan progress batch embedding ke rentang progress pipeline."""
+    if not callable(progress_callback):
+        return None
+
+    def on_batch(progress_data):
+        fraction = progress_data.get("fraction", 0)
+        try:
+            fraction = float(fraction)
+        except (TypeError, ValueError):
+            fraction = 0.0
+
+        fraction = max(0.0, min(1.0, fraction))
+        percent = start_percent + (
+            (end_percent - start_percent) * fraction
+        )
+
+        completed = progress_data.get("completed_items", 0)
+        total = progress_data.get("total_items", 0)
+        completed_batches = progress_data.get("completed_batches", 0)
+        total_batches = progress_data.get("total_batches", 0)
+
+        message = (
+            f"{completed} dari {total} teks selesai "
+            f"({completed_batches}/{total_batches} batch)."
+        )
+
+        report_pipeline_progress(
+            progress_callback,
+            percent,
+            stage,
+            message,
+        )
+
+    return on_batch
 
 
 # Tidak ada angka yang dipaksa harus positif.
@@ -727,6 +815,7 @@ def collect_sources(
     document_title,
     chunks,
     document_doi,
+    progress_callback=None,
 ):
     sources = []
 
@@ -741,7 +830,15 @@ def collect_sources(
         chunks,
     )
 
-    for query in queries:
+    total_queries = len(queries)
+    report_pipeline_progress(
+        progress_callback,
+        16,
+        "Mencari sumber akademik",
+        "Menelusuri referensi ilmiah yang relevan.",
+    )
+
+    for query_index, query in enumerate(queries, start=1):
         results = search_literature(
             query,
             per_page=OPENALEX_PER_PAGE,
@@ -824,6 +921,15 @@ def collect_sources(
                 seen_ids.add(source_key)
 
             sources.append(item)
+
+        if total_queries:
+            query_fraction = query_index / total_queries
+            report_pipeline_progress(
+                progress_callback,
+                16 + (11 * query_fraction),
+                "Mencari sumber akademik",
+                f"Pencarian {query_index} dari {total_queries} selesai.",
+            )
 
     print(
         "[OpenAlex] Kandidat ditemukan:",
@@ -961,7 +1067,10 @@ def audit_similarity_evidence(document_text, source_text):
 def analyze_with_openalex(
     document_text,
     document_title=None,
+    progress_callback=None,
 ):
+    pipeline_started = time.perf_counter()
+
     print()
     print("====================================")
     print("ANTIKOPAS - ACADEMIC V2 STEP 3")
@@ -976,6 +1085,8 @@ def analyze_with_openalex(
         )
 
     # A. PREPROCESSING
+
+    preprocessing_started = time.perf_counter()
 
     clean_text = remove_references(
         document_text
@@ -1056,15 +1167,41 @@ def analyze_with_openalex(
         short_chunk_indices,
     )
 
+    report_pipeline_progress(
+        progress_callback,
+        15,
+        "Menyiapkan dokumen",
+        "Dokumen berhasil dibaca dan disiapkan untuk pemeriksaan.",
+    )
+
+    log_stage_timing(
+        "Preprocessing",
+        preprocessing_started,
+    )
+
     # C. OPENALEX
+
+    openalex_started = time.perf_counter()
 
     literature, source_stats = collect_sources(
         document_title,
         original_chunks,
         extract_document_doi(clean_text),
+        progress_callback=progress_callback,
+    )
+
+    log_stage_timing(
+        "OpenAlex search",
+        openalex_started,
     )
 
     if not literature:
+        report_pipeline_progress(
+            progress_callback,
+            86,
+            "Menyiapkan hasil pemeriksaan",
+            "Pencarian sumber akademik selesai; tidak ada sumber yang memenuhi kriteria.",
+        )
         if source_stats.get("self_match", 0):
             return empty_results(
                 chunks,
@@ -1096,7 +1233,20 @@ def analyze_with_openalex(
             )
 
     if not source_passages:
+        report_pipeline_progress(
+            progress_callback,
+            86,
+            "Menyiapkan hasil pemeriksaan",
+            "Teks sumber yang dapat dibandingkan tidak tersedia.",
+        )
         return empty_results(chunks)
+
+    report_pipeline_progress(
+        progress_callback,
+        28,
+        "Menyiapkan sumber akademik",
+        f"{len(source_passages)} potongan teks sumber siap dibandingkan.",
+    )
 
     print(
         "[Source] Potongan teks sumber:",
@@ -1105,18 +1255,53 @@ def analyze_with_openalex(
 
     # E. EMBEDDING CLOUDFLARE BGE-M3
 
+    report_pipeline_progress(
+        progress_callback,
+        29,
+        "Memeriksa kemiripan",
+        "Membandingkan isi dokumen dengan sumber akademik.",
+    )
+
+    bge_document_started = time.perf_counter()
+
     chunk_embeddings = embedding_model.encode(
         chunks,
         batch_size=BATCH_SIZE,
         convert_to_tensor=True,
         show_progress_bar=False,
+        progress_callback=build_embedding_progress_callback(
+            progress_callback,
+            29,
+            39,
+            "Memeriksa isi dokumen",
+        ),
+        progress_label="Segmen dokumen",
     )
+
+    log_stage_timing(
+        "BGE document",
+        bge_document_started,
+    )
+
+    bge_sources_started = time.perf_counter()
 
     source_embeddings = embedding_model.encode(
         source_passages,
         batch_size=BATCH_SIZE,
         convert_to_tensor=True,
         show_progress_bar=False,
+        progress_callback=build_embedding_progress_callback(
+            progress_callback,
+            39,
+            54,
+            "Membandingkan sumber akademik",
+        ),
+        progress_label="Teks sumber akademik",
+    )
+
+    log_stage_timing(
+        "BGE sources initial",
+        bge_sources_started,
     )
 
     similarity_matrix = util.cos_sim(
@@ -1156,9 +1341,18 @@ def analyze_with_openalex(
         ordered_indices[:MAX_CANDIDATES]
     )
 
+    report_pipeline_progress(
+        progress_callback,
+        56,
+        "Memeriksa ketersediaan teks lengkap",
+        "Pemeringkatan sumber akademik selesai.",
+    )
+
     # ==================================================
     # PENGAMBILAN FULL TEXT SETELAH RANKING BGE-M3
     # ==================================================
+
+    fulltext_started = time.perf_counter()
 
     print()
     print("[FullText] Memulai pengambilan PDF jurnal")
@@ -1166,13 +1360,33 @@ def analyze_with_openalex(
 
     fulltext_attempted = 0
     fulltext_success = 0
+    report_pipeline_progress(
+        progress_callback,
+        57,
+        "Memeriksa ketersediaan teks lengkap",
+        "Memeriksa sumber yang menyediakan dokumen lengkap.",
+    )
 
-    for source_index in ordered_indices:
+    total_ranked_sources = len(ordered_indices)
+
+    for candidate_index, source_index in enumerate(
+        ordered_indices,
+        start=1,
+    ):
 
         if fulltext_attempted >= MAX_FULLTEXT_PDF_ATTEMPTS:
             break
 
         source = literature[source_index]
+
+        # Laporkan kemajuan pemeriksaan ketersediaan PDF,
+        # termasuk kandidat yang memang tidak menyediakan PDF.
+        report_pipeline_progress(
+            progress_callback,
+            57 + (2 * candidate_index / max(1, total_ranked_sources)),
+            "Memeriksa ketersediaan teks lengkap",
+            f"Memeriksa sumber {candidate_index} dari {total_ranked_sources}.",
+        )
 
         # Hanya proses jurnal yang memiliki URL PDF
         # open access yang valid.
@@ -1182,6 +1396,12 @@ def analyze_with_openalex(
             continue
 
         fulltext_attempted += 1
+        report_pipeline_progress(
+            progress_callback,
+            57 + (5 * fulltext_attempted / max(1, MAX_FULLTEXT_PDF_ATTEMPTS)),
+            "Mengakses teks lengkap",
+            f"Memeriksa dokumen sumber {fulltext_attempted} dari {MAX_FULLTEXT_PDF_ATTEMPTS}.",
+        )
 
         print(
             "[FullText] Mencoba jurnal:",
@@ -1222,6 +1442,18 @@ def analyze_with_openalex(
         fulltext_success,
     )
 
+    log_stage_timing(
+        "Full-text retrieval",
+        fulltext_started,
+    )
+
+    report_pipeline_progress(
+        progress_callback,
+        64,
+        "Menyiapkan teks sumber",
+        "Pemeriksaan akses teks lengkap selesai.",
+    )
+
     # ==================================================
     # MEMBANGUN ULANG POTONGAN TEKS SUMBER
     # ==================================================
@@ -1246,6 +1478,12 @@ def analyze_with_openalex(
                 passage_source_indices.append(source_index)
 
         if not source_passages:
+            report_pipeline_progress(
+                progress_callback,
+                86,
+                "Menyiapkan hasil pemeriksaan",
+                "Teks lengkap sumber tidak menghasilkan bagian yang dapat dibandingkan.",
+            )
             return empty_results(chunks)
 
         print(
@@ -1255,11 +1493,25 @@ def analyze_with_openalex(
 
         # Hitung ulang embedding karena sebagian sumber
         # sekarang berisi teks lengkap jurnal.
+        bge_rebuild_started = time.perf_counter()
+
         source_embeddings = embedding_model.encode(
             source_passages,
             batch_size=BATCH_SIZE,
             convert_to_tensor=True,
             show_progress_bar=False,
+            progress_callback=build_embedding_progress_callback(
+                progress_callback,
+                64,
+                72,
+                "Memperbarui perbandingan teks sumber",
+            ),
+            progress_label="Teks sumber setelah pemeriksaan full text",
+        )
+
+        log_stage_timing(
+            "BGE fulltext rebuild",
+            bge_rebuild_started,
         )
 
         # Bandingkan potongan dokumen dengan teks
@@ -1272,6 +1524,20 @@ def analyze_with_openalex(
         print(
             "[FullText] Perbandingan semantik selesai"
         )
+    else:
+        report_pipeline_progress(
+            progress_callback,
+            72,
+            "Menyiapkan teks sumber",
+            "Menggunakan teks akademik yang berhasil diakses.",
+        )
+
+    report_pipeline_progress(
+        progress_callback,
+        73,
+        "Menyiapkan pemeriksaan kemiripan",
+        "Menentukan pasangan teks yang akan divalidasi.",
+    )
 
     print(
         "[CrossEncoder] Memulai validasi pasangan teks..."
@@ -1306,6 +1572,13 @@ def analyze_with_openalex(
             < MIN_EVIDENCE_TOKENS
         ):
             skipped_short += 1
+            pair_fraction = (chunk_index + 1) / max(1, len(chunks))
+            report_pipeline_progress(
+                progress_callback,
+                73 + (6 * pair_fraction),
+                "Menyiapkan pemeriksaan kemiripan",
+                f"Menyiapkan bagian dokumen {chunk_index + 1} dari {len(chunks)}.",
+            )
             continue
 
         strongest_sources = {}
@@ -1417,6 +1690,14 @@ def analyze_with_openalex(
                 validation,
             ))
 
+        pair_fraction = (chunk_index + 1) / max(1, len(chunks))
+        report_pipeline_progress(
+            progress_callback,
+            73 + (6 * pair_fraction),
+            "Menyiapkan pemeriksaan kemiripan",
+            f"Menyiapkan bagian dokumen {chunk_index + 1} dari {len(chunks)}.",
+        )
+
     print(
         "[Validation] Pasangan valid:",
         validated_pairs,
@@ -1456,15 +1737,69 @@ def analyze_with_openalex(
             "[Diagnostic] Tidak ada pasangan "
             "yang lolos seleksi BGE-M3."
         )
+        report_pipeline_progress(
+            progress_callback,
+            92,
+            "Menyiapkan hasil pemeriksaan",
+            "Tidak ada pasangan teks yang memenuhi kriteria validasi.",
+        )
         return empty_results(chunks)
 
     # H. CROSS ENCODER V2
 
-    raw_scores = cross_encoder.predict(
-        pairs,
-        batch_size=BATCH_SIZE,
-        show_progress_bar=False,
-        activation_fn=torch.nn.Identity(),
+    cross_encoder_started = time.perf_counter()
+
+    report_pipeline_progress(
+        progress_callback,
+        80,
+        "Memvalidasi kemiripan",
+        f"Memvalidasi {len(pairs)} pasangan teks.",
+    )
+
+    # Tetap menggunakan batch_size yang sama seperti sebelumnya.
+    # Pemanggilan per batch hanya agar progress bisa dilaporkan;
+    # urutan pasangan dan hasil prediksi tetap dipertahankan.
+    score_batches = []
+    total_score_batches = (
+        len(pairs) + BATCH_SIZE - 1
+    ) // BATCH_SIZE
+
+    for batch_start in range(0, len(pairs), BATCH_SIZE):
+        pair_batch = pairs[
+            batch_start:batch_start + BATCH_SIZE
+        ]
+
+        batch_scores = cross_encoder.predict(
+            pair_batch,
+            batch_size=BATCH_SIZE,
+            show_progress_bar=False,
+            activation_fn=torch.nn.Identity(),
+        )
+
+        score_batches.append(
+            np.asarray(batch_scores, dtype=float).reshape(-1)
+        )
+
+        completed_score_batches = (
+            batch_start // BATCH_SIZE
+        ) + 1
+        completed_pairs = min(
+            batch_start + len(pair_batch),
+            len(pairs),
+        )
+
+        report_pipeline_progress(
+            progress_callback,
+            80 + (11 * completed_score_batches / total_score_batches),
+            "Memvalidasi kemiripan",
+            f"{completed_pairs} dari {len(pairs)} pasangan selesai divalidasi.",
+        )
+
+    raw_scores = np.concatenate(score_batches)
+
+    log_stage_timing(
+        "Academic V2",
+        cross_encoder_started,
     )
 
     scores = np.asarray(
@@ -1848,4 +2183,17 @@ def analyze_with_openalex(
         pipeline_results.diagnostic_message = (
             "Tidak ditemukan bagian dokumen yang menunjukkan kemiripan yang cukup kuat."
         )
+
+    report_pipeline_progress(
+        progress_callback,
+        94,
+        "Pemeriksaan kemiripan selesai",
+        "Hasil perbandingan siap dihitung dan disusun menjadi laporan.",
+    )
+
+    log_stage_timing(
+        "TOTAL PIPELINE",
+        pipeline_started,
+    )
+
     return pipeline_results
