@@ -4,9 +4,9 @@ import logo from './assets/antikopas-logo.png'
 import heroIllustration from './assets/image-transparent.png'
 import heroIllustrationDark from './assets/image-dark-transparent.png'
 import heroIllustrationOriginal from './assets/image-auth-transparent.png'
-import gambar1 from './assets/gambar1.jpg'
-import gambar2 from './assets/gambar2.jpg'
-import gambar3 from './assets/gambar3.jpg'
+import alurStep1 from './assets/alur-step1.png'
+import alurStep2 from './assets/alur-step2.png'
+import alurStep3 from './assets/alur-step3.png'
 import gambar4 from './assets/gambar4-transparent.png'
 import gambar5 from './assets/gambar5-transparent.png'
 import gambar6 from './assets/gambar6-transparent.png'
@@ -14,10 +14,10 @@ import './App.css'
 
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('antikopas_access'))
-  const [theme, setTheme] = useState(() => localStorage.getItem('antikopas_theme') || 'light')
+  const [theme, setTheme] = useState(() => new URLSearchParams(window.location.search).get('theme') || localStorage.getItem('antikopas_theme') || 'light')
   const [currentUser, setCurrentUser] = useState(null)
   const [identityError, setIdentityError] = useState('')
-  const [showLogin, setShowLogin] = useState(false)
+  const [showLogin, setShowLogin] = useState(() => window.location.hash === '#login' || new URLSearchParams(window.location.search).get('view') === 'login')
   const [showRegister, setShowRegister] = useState(false)
   const [login, setLogin] = useState({ username: '', password: '' })
   const [registration, setRegistration] = useState({ username: '', password: '', passwordConfirm: '' })
@@ -774,6 +774,8 @@ function App() {
   if (!token) {
     return (
       <main className="auth-shell">
+        <div className="auth-ambient-orb auth-ambient-orb-orange" aria-hidden="true" />
+        <div className="auth-ambient-orb auth-ambient-orb-blue" aria-hidden="true" />
         <section className="auth-visual">
           <div className="auth-visual-brand"><img className="brand-image" src={logo} alt="Logo AntiKopas" /><span>Anti<span>Kopas</span></span></div>
           <img className="auth-visual-art" src={heroIllustrationOriginal} alt="Ilustrasi analisis dokumen" />
@@ -809,6 +811,8 @@ function App() {
   if (!currentUser) {
     return (
       <main className="auth-shell" style={{ display: 'grid', gridTemplateColumns: '1fr', placeItems: 'center' }}>
+        <div className="auth-ambient-orb auth-ambient-orb-orange" aria-hidden="true" />
+        <div className="auth-ambient-orb auth-ambient-orb-blue" aria-hidden="true" />
         <section className="auth-card" style={{ width: 'min(540px, calc(100% - 32px))' }} aria-live="polite">
           <div className="auth-brand"><img className="brand-image auth-logo" src={logo} alt="Logo AntiKopas" /><span>Anti<span>Kopas</span></span></div>
           <h1>{identityError ? 'Verifikasi akun gagal' : 'Memeriksa akun...'}</h1>
@@ -1198,6 +1202,11 @@ function ThemeToggle({ theme, onToggle }) {
 function LandingPage({ theme, onToggleTheme, onStart }) {
   return (
     <main className="landing-page">
+      <div className="landing-ambient-orb landing-orb-hero-orange" aria-hidden="true" />
+      <div className="landing-ambient-orb landing-orb-hero-blue" aria-hidden="true" />
+      <div className="landing-ambient-orb landing-orb-alur" aria-hidden="true" />
+      <div className="landing-ambient-orb landing-orb-fitur" aria-hidden="true" />
+      <div className="landing-ambient-orb landing-orb-cta" aria-hidden="true" />
       <header className="landing-nav">
         <a className="landing-brand" href="#top" aria-label="AntiKopas beranda">
           <img className="brand-image landing-logo" src={logo} alt="Logo AntiKopas" />
@@ -1239,9 +1248,9 @@ function LandingPage({ theme, onToggleTheme, onStart }) {
 
 function AlurRingkas() {
   const steps = [
-    { number: '01', image: gambar1, alt: 'Unggah dokumen', title: 'Unggah dokumen', description: 'Masukkan file PDF atau DOCX dan beri judul agar pemeriksaan mudah dilacak.' },
-    { number: '02', image: gambar2, alt: 'Mesin menganalisis', title: 'Mesin menganalisis', description: 'Mesin AI membaca segmen dokumen dan membandingkannya dengan sumber akademik.' },
-    { number: '03', image: gambar3, alt: 'Pahami hasilnya', title: 'Pahami hasilnya', description: 'Lihat indeks kemiripan, bukti sumber, riwayat, dan unduh laporan PDF.' },
+    { number: '01', image: alurStep1, alt: 'Unggah dokumen', title: 'Unggah dokumen', description: 'Masukkan file PDF atau DOCX dan beri judul agar pemeriksaan mudah dilacak.' },
+    { number: '02', image: alurStep2, alt: 'Mesin menganalisis', title: 'Mesin menganalisis', description: 'Mesin AI membaca segmen dokumen dan membandingkannya dengan sumber akademik.' },
+    { number: '03', image: alurStep3, alt: 'Pahami hasilnya', title: 'Pahami hasilnya', description: 'Lihat indeks kemiripan, bukti sumber, riwayat, dan unduh laporan PDF.' },
   ]
 
   return (
