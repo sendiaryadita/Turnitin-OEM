@@ -40,6 +40,7 @@ from reportlab.lib.styles import (
 from reportlab.lib.units import mm
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
+from reportlab.pdfgen.canvas import Canvas
 from reportlab.graphics.shapes import Drawing, Rect
 from reportlab.platypus import (
     SimpleDocTemplate,
@@ -50,6 +51,7 @@ from reportlab.platypus import (
     HRFlowable,
     CondPageBreak,
     KeepTogether,
+    PageBreak,
 )
 
 
@@ -81,6 +83,36 @@ CONTENT_WIDTH = (
 
 MAX_EVIDENCE_PER_SOURCE = 2
 MAX_EVIDENCE_CHARACTERS = 650
+
+# Nomor sumber selalu ikut ditampilkan agar warna bukan satu-satunya penanda.
+SOURCE_COLORS = ("#C23B43", "#087FAA", "#7556AB", "#147D69", "#A26013", "#AD427C")
+
+
+class NumberedReportCanvas(Canvas):
+    """Tambahkan total halaman setelah seluruh isi laporan selesai ditata."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._report_pages = []
+
+    def showPage(self):
+        self._report_pages.append(dict(self.__dict__))
+        self._startPage()
+
+    def save(self):
+        page_count = len(self._report_pages)
+        for state in self._report_pages:
+            self.__dict__.update(state)
+            self.saveState()
+            self.setFillColor(MUTED)
+            self.setFont(FONT_REGULAR, 7)
+            self.drawRightString(
+                PAGE_WIDTH - RIGHT_MARGIN, 12 * mm,
+                f"Halaman {self._pageNumber} dari {page_count}",
+            )
+            self.restoreState()
+            super().showPage()
+        super().save()
 
 
 # ==================================================
@@ -488,7 +520,7 @@ def build_styles():
         fontName=FONT_BOLD,
         fontSize=20,
         leading=25,
-        alignment=TA_CENTER,
+        alignment=TA_LEFT,
         textColor=NAVY,
         spaceAfter=4,
     )
@@ -499,7 +531,7 @@ def build_styles():
         fontName=FONT_REGULAR,
         fontSize=10,
         leading=15,
-        alignment=TA_CENTER,
+        alignment=TA_LEFT,
         textColor=MUTED,
         spaceAfter=14,
     )
@@ -599,34 +631,28 @@ def build_styles():
 def draw_page_decoration(canvas, doc):
     canvas.saveState()
 
-    canvas.setFillColor(NAVY)
-
-    canvas.rect(
-        0,
-        PAGE_HEIGHT - 9 * mm,
-        PAGE_WIDTH,
-        9 * mm,
-        fill=1,
-        stroke=0,
-    )
-
     canvas.setFillColor(MUTED)
 
     canvas.setFont(FONT_BOLD, 8)
     canvas.drawString(
         LEFT_MARGIN,
         PAGE_HEIGHT - 17 * mm,
-        "ANTI KOPAS",
+        "ANTIKOPAS / LAPORAN KEMIRIPAN",
     )
 
     canvas.setFont(FONT_REGULAR, 7.5)
     canvas.drawRightString(
         PAGE_WIDTH - RIGHT_MARGIN,
         PAGE_HEIGHT - 17 * mm,
-        "LAPORAN HASIL PEMERIKSAAN",
+        datetime.now().strftime("%d-%m-%Y"),
     )
 
     canvas.setStrokeColor(BORDER)
+
+    canvas.line(
+        LEFT_MARGIN, PAGE_HEIGHT - 20 * mm,
+        PAGE_WIDTH - RIGHT_MARGIN, PAGE_HEIGHT - 20 * mm,
+    )
 
     canvas.line(
         LEFT_MARGIN,
@@ -641,13 +667,7 @@ def draw_page_decoration(canvas, doc):
     canvas.drawString(
         LEFT_MARGIN,
         12 * mm,
-        "AntiKopas | Laporan Pemeriksaan",
-    )
-
-    canvas.drawRightString(
-        PAGE_WIDTH - RIGHT_MARGIN,
-        12 * mm,
-        f"Halaman {doc.page}",
+        "AntiKopas | Hasil pemeriksaan kemiripan dokumen",
     )
 
     canvas.restoreState()
@@ -975,332 +995,162 @@ def generate_report(
     source_similarities=None,
     chunks=None,
 ):
-    """
-    Fungsi kompatibel dengan views.py lama.
-    """
-
+    """Laporan ringkasan dan bukti; kontrak data dari views.py tetap sama."""
     output_path = Path(output_path)
-
-    output_path.parent.mkdir(
-        parents=True,
-        exist_ok=True,
-    )
-
-    matched_sources = (
-        matched_sources
-        if isinstance(
-            matched_sources,
-            (list, tuple),
-        )
-        else []
-    )
-
+    output_path.parent.mkdir(parents=True, exist_ok=True)
     valid_sources = [
-        source
-        for source in matched_sources
-        if isinstance(source, dict)
-    ]
-
+        source for source in (matched_sources or []) if isinstance(source, dict)
+    ] if isinstance(matched_sources, (list, tuple)) else []
     styles = build_styles()
-
-    score_percent = percentage_value(
-        similarity_index
+    score_percent = percentage_value(similarity_index)
+    total_chunks = max(0, int(safe_number(total_chunks)))
+    matched_chunks = max(0, int(safe_number(matched_chunks)))
+    title_style = ParagraphStyle(
+        "AKDocumentTitle", parent=styles["source_title"],
+        fontSize=13, leading=18, spaceAfter=14,
     )
-
-    total_chunks = max(
-        0,
-        int(safe_number(total_chunks)),
+    metric_style = ParagraphStyle(
+        "AKMetric", parent=styles["score"], fontSize=25, leading=32,
+        textColor=NAVY, spaceAfter=4,
     )
-
-    matched_chunks = max(
-        0,
-        int(safe_number(matched_chunks)),
+    badge_style = ParagraphStyle(
+        "AKSourceNumber", parent=styles["body"], fontName=FONT_BOLD,
+        textColor=colors.white, alignment=TA_CENTER, spaceAfter=0,
     )
-
+    source_percent_style = ParagraphStyle(
+        "AKSourcePercent", parent=styles["body"], fontName=FONT_BOLD,
+        fontSize=13, leading=18, spaceAfter=0,
+    )
     doc = SimpleDocTemplate(
-        str(output_path),
-        pagesize=A4,
-        rightMargin=RIGHT_MARGIN,
-        leftMargin=LEFT_MARGIN,
-        topMargin=TOP_MARGIN,
-        bottomMargin=BOTTOM_MARGIN,
-        title="AntiKopas - Laporan Hasil Pemeriksaan",
-        author="AntiKopas",
-        subject="Laporan Hasil Pemeriksaan Kemiripan Dokumen",
+        str(output_path), pagesize=A4,
+        rightMargin=RIGHT_MARGIN, leftMargin=LEFT_MARGIN,
+        topMargin=TOP_MARGIN, bottomMargin=BOTTOM_MARGIN,
+        title="AntiKopas - Laporan Kemiripan Dokumen", author="AntiKopas",
+        subject="Ringkasan hasil dan sumber kemiripan",
     )
-
-    elements = []
-
-    # --------------------------------------
-    # A. JUDUL
-    # --------------------------------------
-
-    elements.append(
-        Spacer(1, 7 * mm)
-    )
-
-    elements.append(
+    elements = [
+        Spacer(1, 5 * mm),
+        Paragraph("ANTIKOPAS LAPORAN KEMIRIPAN", styles["brand"]),
+        Paragraph("Laporan hasil pemeriksaan kemiripan dokumen akademik", styles["subtitle"]),
+        Paragraph(safe_text(title, "Dokumen tanpa judul"), title_style),
+    ]
+    metrics = []
+    for value, label in [
+        (f"{score_percent:.2f}%", "KEMIRIPAN DOKUMEN"),
+        (str(len(valid_sources)), "SUMBER COCOK"),
+    ]:
+        metrics.append([
+            Paragraph(value, metric_style), Paragraph(label, styles["score_label"]),
+        ])
+    summary = Table([metrics], colWidths=[CONTENT_WIDTH / 2] * 2, hAlign="LEFT")
+    summary.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), LIGHT_GRAY),
+        ("BACKGROUND", (0, 0), (0, 0), LIGHT_BLUE),
+        ("BOX", (0, 0), (-1, -1), 0.6, BORDER),
+        ("INNERGRID", (0, 0), (-1, -1), 0.4, BORDER),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("TOPPADDING", (0, 0), (-1, -1), 14),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+    ]))
+    elements.extend([
+        summary, Spacer(1, 4 * mm),
         Paragraph(
-            "ANTI KOPAS",
-            styles["brand"],
-        )
-    )
-
-    elements.append(
-        Paragraph(
-            "Analisis Kemiripan Semantik",
-            styles["subtitle"],
-        )
-    )
-
-    elements.append(
-        HRFlowable(
-            width="100%",
-            thickness=1.2,
-            color=BORDER,
-            spaceAfter=13,
-        )
-    )
-
-    # --------------------------------------
-    # B. SIMILARITY INDEX
-    # --------------------------------------
-
-    elements.append(
-        Paragraph(
-            f"{score_percent:.2f}%",
-            styles["score"],
-        )
-    )
-
-    elements.append(
-        Paragraph(
-            "Cakupan Kemiripan Semantik",
-            styles["score_label"],
-        )
-    )
-
-    elements.append(
-        Spacer(1, 4 * mm)
-    )
-
-    elements.append(
-        make_progress_bar(score_percent)
-    )
-
-    elements.append(
-        Spacer(1, 5 * mm)
-    )
-
-    elements.append(
-        Paragraph(
-            "Persentase ini menunjukkan bagian dokumen yang "
-            "memiliki kecocokan makna dengan sumber akademik "
-            "yang ditemukan. Persentase per sumber dapat saling "
-            "tumpang tindih dan tidak dijumlahkan untuk memperoleh "
-            "nilai keseluruhan. Angka ini bukan persentase "
-            "plagiarisme atau bukti penyalinan; setiap temuan perlu "
-            "ditinjau berdasarkan konteks dan sitasi.",
+            "Persentase menunjukkan kemiripan tulisan dengan sumber yang ditemukan. "
+            "Hasil ini perlu ditinjau kembali dan bukan keputusan plagiarisme. "
+            "Nilai 0% tidak menjamin dokumen bebas kemiripan.",
             styles["note"],
-        )
-    )
-
-    # --------------------------------------
-    # C. DETAIL DOKUMEN
-    # --------------------------------------
-
-    elements.append(
-        section_heading(
-            "DETAIL DOKUMEN",
-            styles,
-        )
-    )
-
-    elements.append(
-        make_detail_table(
-            title=title,
-            source_count=len(valid_sources),
-            styles=styles,
-        )
-    )
-
-    # --------------------------------------
-    # D. SUMBER AKADEMIK
-    # --------------------------------------
-
-    elements.append(
-        section_heading(
-            "SUMBER AKADEMIK TERDETEKSI",
-            styles,
-        )
-    )
-
-    if not valid_sources:
-        elements.append(
-            Paragraph(
-                "Tidak ditemukan sumber akademik "
-                "yang melewati seluruh kriteria "
-                "kecocokan sistem.",
-                styles["body"],
-            )
-        )
-
-    for index, source in enumerate(
-        valid_sources,
-        start=1,
-    ):
-        elements.append(
-            CondPageBreak(45 * mm)
-        )
-
-        source_title = safe_text(
-            source.get("title"),
-            "Judul tidak tersedia",
-        )
-
-        source_year = safe_text(
-            source.get("year"),
-            "Tidak tersedia",
-        )
-
-        source_doi = source.get("doi") or ""
-
-        elements.append(
-            KeepTogether([
-                Paragraph(
-                    f"<b>{index}. {source_title}</b>",
-                    styles["source_title"],
-                ),
-                Paragraph(
-                    "<b>Tahun publikasi:</b> "
-                    f"{source_year}",
-                    styles["body"],
-                ),
-            ])
-        )
-
-        if source_doi:
-            elements.append(
-                Paragraph(
-                    "<b>DOI:</b>",
-                    styles["label"],
-                )
-            )
-
-            elements.append(
-                url_paragraph(
-                    source_doi,
-                    styles["body"],
-                )
-            )
-
-        elif source.get("url"):
-            elements.append(
-                Paragraph(
-                    "<b>URL sumber:</b>",
-                    styles["label"],
-                )
-            )
-
-            elements.append(
-                url_paragraph(
-                    source.get("url"),
-                    styles["body"],
-                )
-            )
-
-        stats = find_source_statistics(
-            source,
-            source_similarities,
-        )
-
-        if isinstance(stats, dict):
-            coverage = stats.get(
-                "similarity_percentage"
-            )
-
-            if coverage is not None:
-                elements.append(
-                    Paragraph(
-                        "<b>Cakupan per sumber:</b> "
-                        f"{safe_number(coverage):.2f}%",
-                        styles["body"],
-                    )
-                )
-
-        evidence = collect_source_evidence(
-            source,
-            chunks,
-        )
-
+        ),
+        section_heading("SUMBER AKADEMIK / RINGKASAN", styles),
+    ])
+    evidence_groups = []
+    for number, source in enumerate(valid_sources, start=1):
+        color = SOURCE_COLORS[(number - 1) % len(SOURCE_COLORS)]
+        stats = find_source_statistics(source, source_similarities)
+        coverage = stats.get("similarity_percentage") if isinstance(stats, dict) else None
+        coverage_label = f"{safe_number(coverage):.2f}%" if coverage is not None else "-"
+        details = [Paragraph(safe_text(source.get("title"), "Judul tidak tersedia"), styles["source_title"])]
+        year = safe_text(source.get("year"), "Tidak tercatat")
+        details.append(Paragraph(f"Tahun: {year} | Sumber akademik", styles["small"]))
+        link = source.get("doi") or source.get("url")
+        if link:
+            details.append(url_paragraph(link, styles["small"]))
+        row = Table([[
+            Paragraph(str(number), badge_style),
+            Paragraph(f'<font color="{color}">{coverage_label}</font>', source_percent_style),
+            details,
+        ]], colWidths=[24, 62, CONTENT_WIDTH - 86], hAlign="LEFT")
+        row.setStyle(TableStyle([
+            ("BACKGROUND", (0, 0), (0, 0), colors.HexColor(color)),
+            ("LINEBELOW", (1, 0), (-1, -1), 0.5, BORDER),
+            ("VALIGN", (0, 0), (1, 0), "MIDDLE"),
+            ("VALIGN", (2, 0), (2, 0), "TOP"),
+            ("TOPPADDING", (0, 0), (-1, -1), 10),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 10),
+            ("LEFTPADDING", (1, 0), (1, 0), 9),
+        ]))
+        elements.extend([row, Spacer(1, 2 * mm)])
+        evidence = collect_source_evidence(source, chunks)
         if evidence:
-            add_evidence(
-                elements,
-                evidence,
-                styles,
-            )
-
-        elements.append(
-            Spacer(1, 3 * mm)
-        )
-
-        elements.append(
-            HRFlowable(
-                width="100%",
-                thickness=0.7,
-                color=BORDER,
-            )
-        )
-
-    # --------------------------------------
-    # F. CATATAN KETERSEDIAAN BUKTI
-    # --------------------------------------
-
-    if (
-        valid_sources
-        and (
-            source_similarities is None
-            or chunks is None
-        )
-    ):
-        elements.append(
-            Spacer(1, 4 * mm)
-        )
-
-        elements.append(
+            evidence_groups.append((number, source, color, evidence))
+    if not valid_sources:
+        elements.append(Paragraph(
+            "Tidak ditemukan sumber dengan kemiripan yang sesuai "
+            "pada pemeriksaan ini.", styles["body"],
+        ))
+    if valid_sources and not evidence_groups:
+        elements.append(Paragraph(
+            "Cuplikan pembanding belum tersedia pada laporan ini. "
+            "Tanda '-' berarti persentase sumber tidak tersedia.", styles["note"],
+        ))
+    if evidence_groups:
+        elements.extend([
+            PageBreak(),
+            Paragraph("BUKTI KEMIRIPAN TEKS", styles["brand"]),
             Paragraph(
-                "<b>Catatan:</b> Persentase "
-                "per sumber dan bukti pasangan "
-                "teks hanya dapat ditampilkan "
-                "jika data detail diberikan "
-                "kepada generator laporan.",
-                styles["note"],
-            )
+                "Bandingkan cuplikan dokumen dengan sumber bernomor dan berwarna sama.",
+                styles["subtitle"],
+            ),
+        ])
+    for number, source, color, evidence in evidence_groups:
+        elements.extend([
+            CondPageBreak(65 * mm),
+            Paragraph(
+                f'<font color="{color}">[{number}]</font> ' +
+                safe_text(source.get("title"), "Judul tidak tersedia"),
+                title_style,
+            ),
+        ])
+        ink = colors.HexColor(color)
+        tint = colors.Color(
+            0.93 + ink.red * 0.07, 0.93 + ink.green * 0.07, 0.93 + ink.blue * 0.07,
         )
-
-    # --------------------------------------
-    # G. BUILD PDF
-    # --------------------------------------
-
+        highlighted = ParagraphStyle(
+            f"AKHighlight{number}", parent=styles["body"],
+            backColor=tint, borderColor=ink, borderWidth=0.5,
+            borderPadding=9, spaceBefore=4, spaceAfter=15,
+            splitLongWords=True,
+        )
+        for example, item in enumerate(evidence, start=1):
+            elements.extend([
+                CondPageBreak(45 * mm),
+                Paragraph(f"CUPLIKAN {example}", styles["label"]),
+                Spacer(1, 3 * mm),
+                Paragraph(
+                    f'<b><font color="{color}">[{number}] Dokumen yang diperiksa</font></b><br/>' +
+                    safe_text(item.get("document_text")), highlighted,
+                ),
+                Paragraph(f"CUPLIKAN SUMBER [{number}]", styles["label"]),
+                Spacer(1, 2 * mm),
+                Paragraph(safe_text(item.get("source_text")), styles["body"]),
+                Spacer(1, 3 * mm),
+                HRFlowable(width="100%", thickness=0.5, color=BORDER),
+                Spacer(1, 5 * mm),
+            ])
     doc.build(
-        elements,
-        onFirstPage=draw_page_decoration,
-        onLaterPages=draw_page_decoration,
+        elements, onFirstPage=draw_page_decoration,
+        onLaterPages=draw_page_decoration, canvasmaker=NumberedReportCanvas,
     )
-
-    print(
-        "[AntiKopas Report] PDF dibuat:",
-        output_path,
-    )
-
-    print(
-        "[AntiKopas Report] Semantic Coverage:",
-        f"{score_percent:.2f}%",
-    )
-
-    print(
-        "[AntiKopas Report] Sumber:",
-        len(valid_sources),
-    )
-
+    print("[AntiKopas Report] PDF dibuat:", output_path)
+    print("[AntiKopas Report] Semantic Coverage:", f"{score_percent:.2f}%")
+    print("[AntiKopas Report] Sumber:", len(valid_sources))
     return str(output_path)

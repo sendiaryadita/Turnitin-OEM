@@ -7,6 +7,7 @@ from datetime import datetime
 from pathlib import Path
 
 from django.utils import timezone
+from django.utils.text import slugify
 
 from django.contrib.auth.models import User
 from django.contrib.auth.password_validation import validate_password
@@ -860,7 +861,7 @@ def download_report(
     report_record = Report.objects.filter(
         file__endswith=safe_filename,
         analysis__document__uploaded_by=request.user,
-    ).first()
+    ).select_related("analysis__document").first()
     if report_record is None:
         return Response({
             "status": "error",
@@ -875,9 +876,16 @@ def download_report(
             "message": "Report tidak ditemukan"
         }, status=404)
 
+    document = report_record.analysis.document
+    original_title = Path(document.original_file.name).stem
+    title_slug = (
+        slugify(document.title) or slugify(original_title) or "hasil-analisis"
+    )[:70].strip("-")
+    download_filename = f"antikopas_{title_slug}_AK-{report_record.analysis_id}.pdf"
+
     return FileResponse(
         open(report_path, "rb"),
         as_attachment=True,
-        filename=safe_filename,
+        filename=download_filename,
         content_type="application/pdf"
     )

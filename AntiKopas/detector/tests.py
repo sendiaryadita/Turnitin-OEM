@@ -364,8 +364,23 @@ class BackendApiTests(TestCase):
                     allowed_response["Content-Type"],
                     "application/pdf",
                 )
+                self.assertIn(
+                    f'filename="antikopas_laporan-pribadi_AK-{job.pk}.pdf"',
+                    allowed_response["Content-Disposition"],
+                )
 
                 allowed_response.close()
+
+                # Judul kosong/tidak layak menjadi nama file menggunakan nama asli.
+                document.title = "???"
+                document.original_file = "documents/Artikel Asli.pdf"
+                document.save(update_fields=["title", "original_file"])
+                fallback_response = owner_client.get(report_url)
+                self.assertIn(
+                    f'filename="antikopas_artikel-asli_AK-{job.pk}.pdf"',
+                    fallback_response["Content-Disposition"],
+                )
+                fallback_response.close()
 
                     # ==================================================
     # PENGUJIAN HAK AKSES ADMINISTRATOR

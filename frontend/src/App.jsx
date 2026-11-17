@@ -774,10 +774,12 @@ function App() {
       .replace(/[^a-zA-Z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
       .slice(0, 70)
+      .replace(/-+$/g, '')
+      .toLowerCase()
 
     const identity = analysisId ? `AK-${analysisId}` : 'AK'
 
-    return `AntiKopas_Laporan_${identity}_${safeTitle || 'Hasil-Analisis'}.pdf`
+    return `antikopas_${safeTitle || 'hasil-analisis'}_${identity}.pdf`
   }
 
   async function handleDownloadReport(url, title, analysisId) {

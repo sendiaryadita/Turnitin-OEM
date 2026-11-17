@@ -1285,8 +1285,12 @@ def analyze_with_openalex(
 
     bge_sources_started = time.perf_counter()
 
+    # Hanya berlaku untuk scan ini; abstrak yang tidak berubah saat rebuild
+    # tidak perlu dikirim ulang ke Cloudflare.
+    source_embedding_cache = {}
     source_embeddings = embedding_model.encode(
         source_passages,
+        embedding_cache=source_embedding_cache,
         batch_size=BATCH_SIZE,
         convert_to_tensor=True,
         show_progress_bar=False,
@@ -1497,6 +1501,7 @@ def analyze_with_openalex(
 
         source_embeddings = embedding_model.encode(
             source_passages,
+            embedding_cache=source_embedding_cache,
             batch_size=BATCH_SIZE,
             convert_to_tensor=True,
             show_progress_bar=False,

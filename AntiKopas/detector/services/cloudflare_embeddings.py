@@ -13,6 +13,7 @@ Menggantikan fungsi embedding MiniLM secara bertahap.
 
 import os
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 import requests
@@ -27,6 +28,7 @@ class CloudflareBGEEmbedding:
     # Batasi jumlah teks per request supaya
     # proses dokumen besar lebih terkendali.
     MAX_BATCH_SIZE = 12
+    MAX_CONCURRENT_BATCHES = 2
 
     RETRYABLE_STATUS = {
         429, 500, 502, 503, 504
@@ -193,6 +195,7 @@ class CloudflareBGEEmbedding:
         show_progress_bar=False,
         progress_callback=None,
         progress_label="Embedding teks",
+        embedding_cache=None,
     ):
         """
         Antarmuka kompatibel dengan penggunaan
@@ -206,6 +209,9 @@ class CloudflareBGEEmbedding:
         progress_callback bersifat opsional. Jika diberikan,
         callback menerima dictionary progres setelah setiap batch
         berhasil. Tanpa callback, perilaku lama tetap sama.
+
+        embedding_cache opsional harus dibuat baru untuk setiap scan.
+        Hanya teks yang belum tersedia di cache dikirim ke API.
         """
 
         single_text = isinstance(texts, str)
@@ -230,6 +236,21 @@ class CloudflareBGEEmbedding:
                 "berupa teks yang tidak kosong."
             )
 
+        # Cache diberikan oleh satu proses scan, bukan disimpan lintas user.
+        # Teks identik menggunakan kembali vektor tanpa mengubah isinya.
+        requested_texts = texts
+        if embedding_cache is not None:
+            texts = list(dict.fromkeys(
+                text for text in texts if text not in embedding_cache
+            ))
+
+        if not texts:
+            embeddings = np.stack([
+                embedding_cache[text] for text in requested_texts
+            ])
+            output = torch.from_numpy(embeddings) if convert_to_tensor else embeddings
+            return output[0] if single_text else output
+
         effective_batch_size = min(
             max(1, int(batch_size)),
             self.MAX_BATCH_SIZE,
@@ -246,68 +267,62 @@ class CloudflareBGEEmbedding:
             f"dalam {total_batches} batch."
         )
 
-        for start in range(
-            0,
-            len(texts),
-            effective_batch_size,
-        ):
+        batches = [
+            texts[start:start + effective_batch_size]
+            for start in range(0, len(texts), effective_batch_size)
+        ]
+        executor = ThreadPoolExecutor(
+            max_workers=min(self.MAX_CONCURRENT_BATCHES, total_batches)
+        )
+        try:
+            # map mempertahankan urutan input meski request selesai tidak berurutan.
+            vectors_by_batch = executor.map(self._request_batch, batches)
+            for batch_number, vectors in enumerate(vectors_by_batch, start=1):
+                all_vectors.append(vectors)
+                self._report_batch_progress(
+                    batch_number, total_batches,
+                    min(batch_number * effective_batch_size, len(texts)),
+                    len(texts), progress_callback, progress_label,
+                )
+        finally:
+            executor.shutdown(wait=True, cancel_futures=True)
 
-            batch = texts[
-                start:start + effective_batch_size
-            ]
+        embeddings = np.concatenate(all_vectors, axis=0)
+        if embedding_cache is not None:
+            embedding_cache.update(zip(texts, embeddings))
+            embeddings = np.stack([
+                embedding_cache[text] for text in requested_texts
+            ])
 
-            vectors = self._request_batch(batch)
+        output = torch.from_numpy(embeddings) if convert_to_tensor else embeddings
+        return output[0] if single_text else output
 
-            all_vectors.append(vectors)
+    def _report_batch_progress(
+        self, batch_number, total_batches, completed_items,
+        total_items, progress_callback, progress_label,
+    ):
 
-            batch_number = (
-                start // effective_batch_size
-            ) + 1
-            completed_items = min(
-                start + len(batch),
-                len(texts),
-            )
-
-            print(
-                f"[BGE-M3] Batch "
-                f"{batch_number}/{total_batches} "
-                "berhasil."
-            )
-
-            # Progress hanya dilaporkan setelah request batch
-            # berhasil. Kegagalan callback tidak boleh
-            # menggagalkan proses embedding yang sudah berjalan.
-            if callable(progress_callback):
-                progress_data = {
-                    "event": "embedding_batch_completed",
-                    "stage": str(progress_label),
-                    "completed_batches": batch_number,
-                    "total_batches": total_batches,
-                    "completed_items": completed_items,
-                    "total_items": len(texts),
-                    "fraction": completed_items / len(texts),
-                }
-                try:
-                    progress_callback(progress_data)
-                except Exception as error:
-                    print(
-                        "[BGE-M3] Peringatan: callback progress gagal:",
-                        type(error).__name__,
-                    )
-
-        embeddings = np.concatenate(
-            all_vectors,
-            axis=0,
+        print(
+            f"[BGE-M3] Batch "
+            f"{batch_number}/{total_batches} "
+            "berhasil."
         )
 
-        if convert_to_tensor:
-            output = torch.from_numpy(
-                embeddings
-            )
-        else:
-            output = embeddings
-
-        if single_text:
-            return output[0]
-
-        return output
+        # Callback tetap berurutan dan dijalankan di thread pemanggil.
+        if callable(progress_callback):
+            progress_data = {
+                "event": "embedding_batch_completed",
+                "stage": str(progress_label),
+                "completed_batches": batch_number,
+                "total_batches": total_batches,
+                "completed_items": completed_items,
+                "total_items": total_items,
+                "fraction": completed_items / total_items,
+            }
+            try:
+                progress_callback(progress_data)
+            except Exception as error:
+                print(
+                    "[BGE-M3] Peringatan: callback progress gagal:",
+                    type(error).__name__,
+                )
