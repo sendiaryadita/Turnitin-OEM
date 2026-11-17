@@ -1225,27 +1225,58 @@ function App() {
 
               {result.source_similarities?.length > 0 && (
                 <div className="source-summary">
-                  <h3>Sumber yang cocok</h3>
+                  <div className="source-summary-header">
+                    <h3>Sumber yang cocok</h3>
+                    <span className="source-summary-count">
+                      {Math.min(result.source_similarities.length, 5)} dari {result.source_similarities.length} sumber
+                    </span>
+                  </div>
 
-                  {result.source_similarities.slice(0, 5).map((source) => (
-                    <div
-                      className="source-summary-item"
-                      key={source.openalex_id || source.doi || source.title}
-                    >
-                      <div>
-                        <strong>{source.title}</strong>
-                        <span>
-                          Cakupan kecocokan: {Number(source.similarity_percentage).toFixed(2)}%
-                        </span>
+                  <div className="source-summary-list">
+                    {result.source_similarities.slice(0, 5).map((source, idx) => (
+                      <div
+                        className="source-summary-item"
+                        key={source.openalex_id || source.doi || source.title || idx}
+                      >
+                        <div className="source-summary-left">
+                          <span className="source-rank-badge">{idx + 1}</span>
+                          <div className="source-summary-info">
+                            <strong title={source.title}>{source.title}</strong>
+                            <div className="source-summary-meta">
+                              <span className="source-match-badge">
+                                Cakupan kecocokan: <b>{Number(source.similarity_percentage).toFixed(2)}%</b>
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {source.url && (
+                          <a
+                            href={source.url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="source-open-btn"
+                            title="Buka sumber referensi di tab baru"
+                          >
+                            <span>Buka sumber</span>
+                            <svg
+                              className="line-icon"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                              <polyline points="15 3 21 3 21 9" />
+                              <line x1="10" y1="14" x2="21" y2="3" />
+                            </svg>
+                          </a>
+                        )}
                       </div>
-
-                      {source.url && (
-                        <a href={source.url} target="_blank" rel="noreferrer">
-                          Buka sumber
-                        </a>
-                      )}
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

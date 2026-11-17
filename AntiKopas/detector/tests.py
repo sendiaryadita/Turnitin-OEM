@@ -369,8 +369,6 @@ class BackendApiTests(TestCase):
                     allowed_response["Content-Disposition"],
                 )
 
-                allowed_response.close()
-
                 # Judul kosong/tidak layak menjadi nama file menggunakan nama asli.
                 document.title = "???"
                 document.original_file = "documents/Artikel Asli.pdf"
@@ -380,7 +378,11 @@ class BackendApiTests(TestCase):
                     f'filename="antikopas_artikel-asli_AK-{job.pk}.pdf"',
                     fallback_response["Content-Disposition"],
                 )
-                fallback_response.close()
+
+                for closer in getattr(allowed_response, "_resource_closers", []):
+                    closer()
+                for closer in getattr(fallback_response, "_resource_closers", []):
+                    closer()
 
                     # ==================================================
     # PENGUJIAN HAK AKSES ADMINISTRATOR
