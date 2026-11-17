@@ -12,13 +12,45 @@ import gambar5 from './assets/gambar5-transparent.png'
 import gambar6 from './assets/gambar6-transparent.png'
 import './App.css'
 
+function getPathForView(view) {
+  switch (view) {
+    case 'login': return '/login'
+    case 'register': return '/register'
+    case 'dashboard':
+    case 'app':
+    case 'aplikasi':
+      return '/dashboard'
+    case 'landing':
+    case 'beranda':
+    case 'home':
+    default:
+      return '/'
+  }
+}
+
+function getViewFromPath(pathname) {
+  const normalized = (pathname || (typeof window !== 'undefined' ? window.location.pathname : '/') || '/').toLowerCase().replace(/\/+$/, '') || '/'
+  if (normalized === '/login' || normalized === '/masuk') return 'login'
+  if (normalized === '/register' || normalized === '/daftar') return 'register'
+  if (normalized === '/dashboard' || normalized === '/app' || normalized === '/aplikasi') return 'dashboard'
+  if (normalized === '/beranda' || normalized === '/home' || normalized === '/landing') return 'landing'
+  return 'landing'
+}
+
 function App() {
   const [token, setToken] = useState(() => localStorage.getItem('antikopas_access'))
-  const [theme, setTheme] = useState(() => new URLSearchParams(window.location.search).get('theme') || localStorage.getItem('antikopas_theme') || 'light')
+  const [theme, setTheme] = useState(() => new URLSearchParams(window.location.search).get('theme') || localStorage.getItem('antikopas_theme') || 'dark')
+  const [routeView, setRouteView] = useState(() => getViewFromPath(window.location.pathname))
   const [currentUser, setCurrentUser] = useState(null)
   const [identityError, setIdentityError] = useState('')
-  const [showLogin, setShowLogin] = useState(() => window.location.hash === '#login' || new URLSearchParams(window.location.search).get('view') === 'login')
-  const [showRegister, setShowRegister] = useState(false)
+  const [showLogin, setShowLogin] = useState(() => {
+    const v = getViewFromPath(window.location.pathname)
+    return v === 'login' || v === 'register' || window.location.hash === '#login' || new URLSearchParams(window.location.search).get('view') === 'login'
+  })
+  const [showRegister, setShowRegister] = useState(() => {
+    const v = getViewFromPath(window.location.pathname)
+    return v === 'register' || window.location.hash === '#register' || new URLSearchParams(window.location.search).get('view') === 'register'
+  })
   const [login, setLogin] = useState({ username: '', password: '' })
   const [registration, setRegistration] = useState({ username: '', password: '', passwordConfirm: '' })
   const [form, setForm] = useState({ title: '', file: null })
@@ -43,29 +75,62 @@ function App() {
     setTheme((currentTheme) => currentTheme === 'dark' ? 'light' : 'dark')
   }
   useEffect(() => {
-    const currentView = token ? 'dashboard' : showLogin ? 'login' : 'landing'
-    if (!window.history.state?.antikopas) {
-      window.history.replaceState({ antikopas: true, view: currentView }, '', window.location.href)
+    const urlView = getViewFromPath(window.location.pathname)
+    let currentView = urlView
+
+    if (token) {
+      if (urlView === 'login' || urlView === 'register') {
+        currentView = 'dashboard'
+      } else if (urlView === 'landing') {
+        currentView = 'landing'
+      } else {
+        currentView = 'dashboard'
+      }
+    } else {
+      if (urlView === 'dashboard') {
+        currentView = 'login'
+      } else if (showRegister) {
+        currentView = 'register'
+      } else if (showLogin) {
+        currentView = 'login'
+      } else {
+        currentView = 'landing'
+      }
+    }
+
+    setRouteView(currentView)
+    const targetPath = getPathForView(currentView)
+    const searchParams = new URLSearchParams(window.location.search)
+    const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
+    const fullTarget = `${targetPath}${searchStr}`
+
+    const acceptedAliases = ['/', '/beranda', '/home', '/dashboard', '/app', '/aplikasi', '/login', '/masuk', '/register', '/daftar']
+    if (!acceptedAliases.includes(window.location.pathname) || (currentView === 'dashboard' && !['/dashboard', '/app', '/aplikasi'].includes(window.location.pathname))) {
+      window.history.replaceState({ antikopas: true, view: currentView }, '', fullTarget)
     }
 
     function handleBrowserBack(event) {
-      if (token) {
-        window.history.pushState({ antikopas: true, view: 'dashboard' }, '', window.location.href)
-        return
-      }
-
-      const view = event.state?.antikopas ? event.state.view : 'landing'
-      setShowLogin(view === 'login')
-      setShowRegister(false)
+      const view = event.state?.antikopas ? event.state.view : getViewFromPath(window.location.pathname)
+      setRouteView(view)
+      setShowLogin(view === 'login' || view === 'register')
+      setShowRegister(view === 'register')
       setMessage('')
     }
 
     window.addEventListener('popstate', handleBrowserBack)
     return () => window.removeEventListener('popstate', handleBrowserBack)
-  }, [token, showLogin])
+  }, [token, showLogin, showRegister])
 
   function navigateApp(view) {
-    window.history.pushState({ antikopas: true, view }, '', window.location.href)
+    setRouteView(view)
+    const targetPath = getPathForView(view)
+    const searchParams = new URLSearchParams(window.location.search)
+    const searchStr = searchParams.toString() ? `?${searchParams.toString()}` : ''
+    const fullTarget = `${targetPath}${searchStr}`
+
+    if (window.location.pathname !== targetPath) {
+      window.history.pushState({ antikopas: true, view }, '', fullTarget)
+    }
   }
 
   function friendlyAnalysisStage(stage) {
@@ -767,8 +832,23 @@ function App() {
     navigateApp('landing')
   }
 
-  if (!token && !showLogin) {
-    return <LandingPage theme={theme} onToggleTheme={toggleTheme} onStart={() => { navigateApp('login'); setShowLogin(true) }} />
+  if (routeView === 'landing' || (!token && !showLogin)) {
+    return (
+      <LandingPage
+        theme={theme}
+        onToggleTheme={toggleTheme}
+        token={token}
+        onStart={() => {
+          if (token) {
+            navigateApp('dashboard')
+          } else {
+            navigateApp('login')
+            setShowLogin(true)
+            setShowRegister(false)
+          }
+        }}
+      />
+    )
   }
 
   if (!token) {
@@ -783,7 +863,7 @@ function App() {
         </section>
         <section className="auth-card">
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
-          <button className="back-link" onClick={() => { navigateApp('landing'); setShowLogin(false) }}>← Kembali ke beranda</button>
+          <button className="back-link" onClick={() => { navigateApp('landing'); setShowLogin(false); setShowRegister(false) }}>← Kembali ke beranda</button>
           <div className="auth-brand"><img className="brand-image auth-logo" src={logo} alt="Logo AntiKopas" /><span>Anti<span>Kopas</span></span></div>
           <p className="eyebrow">RUANG KERJA AKADEMIK DIGITAL</p>
           <h1>{showRegister ? <>Buat akun <em>baru.</em></> : <>Masuk untuk <em>memeriksa.</em></>}</h1>
@@ -793,12 +873,12 @@ function App() {
             <label>Password<input required type="password" value={registration.password} onChange={(e) => setRegistration({ ...registration, password: e.target.value })} /></label>
             <label>Konfirmasi password<input required type="password" value={registration.passwordConfirm} onChange={(e) => setRegistration({ ...registration, passwordConfirm: e.target.value })} /></label>
             <button className="auth-submit" disabled={busy}>{busy ? 'Memproses...' : 'Daftar akun'}</button>
-            <button type="button" className="auth-switch" onClick={() => { setShowRegister(false); setMessage('') }}>Sudah punya akun? Masuk</button>
+            <button type="button" className="auth-switch" onClick={() => { setShowRegister(false); navigateApp('login'); setMessage('') }}>Sudah punya akun? Masuk</button>
           </form> : <form onSubmit={handleLogin} className="stack-form">
             <label>Username<input required value={login.username} onChange={(e) => setLogin({ ...login, username: e.target.value })} /></label>
             <label>Password<input required type="password" value={login.password} onChange={(e) => setLogin({ ...login, password: e.target.value })} /></label>
             <button className="auth-submit" disabled={busy}>{busy ? 'Memproses...' : 'Masuk ke aplikasi'}</button>
-            <button type="button" className="auth-switch" onClick={() => { setShowRegister(true); setMessage('') }}>Belum punya akun? Daftar</button>
+            <button type="button" className="auth-switch" onClick={() => { setShowRegister(true); navigateApp('register'); setMessage('') }}>Belum punya akun? Daftar</button>
           </form>}
           {message && <p className="notice error">{message}</p>}
           <p className="auth-footnote">Workspace privat untuk analisis dokumen akademik.</p>
@@ -836,8 +916,27 @@ function App() {
 
     return (
       <main className="dashboard-reference">
+        <div className="dashboard-ambient-orb dashboard-orb-orange" aria-hidden="true" />
+        <div className="dashboard-ambient-orb dashboard-orb-blue" aria-hidden="true" />
         <nav className="dashboard-reference-nav">
+          <div
+            className="dashboard-reference-brand"
+            onClick={() => navigateApp('landing')}
+            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+            title="Klik untuk kembali ke Beranda (Tampilan Awal)"
+          >
+            <img className="brand-image dashboard-reference-logo" src={logo} alt="Logo AntiKopas" />
+            <span>Anti<span>Kopas</span></span>
+          </div>
           <div className="dashboard-reference-actions">
+            <button
+              type="button"
+              className="dashboard-reference-home-btn"
+              onClick={() => navigateApp('landing')}
+              title="Lihat Halaman Beranda (Tampilan Awal)"
+            >
+              Beranda
+            </button>
             <ThemeToggle theme={theme} onToggle={toggleTheme} />
             <span className="dashboard-reference-avatar" aria-label={`Akun ${currentUser.username}`}>{currentUser.username.charAt(0).toUpperCase()}</span>
             <button className="dashboard-reference-logout" onClick={logout}><LineIcon type="logout" /> Keluar</button>
@@ -874,12 +973,27 @@ function App() {
 
   return (
     <main className="dashboard-reference">
+      <div className="dashboard-ambient-orb dashboard-orb-orange" aria-hidden="true" />
+      <div className="dashboard-ambient-orb dashboard-orb-blue" aria-hidden="true" />
       <nav className="dashboard-reference-nav">
-        <div className="dashboard-reference-brand">
+        <div
+          className="dashboard-reference-brand"
+          onClick={() => navigateApp('landing')}
+          style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px' }}
+          title="Klik untuk kembali ke Beranda (Tampilan Awal)"
+        >
           <img className="brand-image dashboard-reference-logo" src={logo} alt="Logo AntiKopas" />
           <span>Anti<span>Kopas</span></span>
         </div>
         <div className="dashboard-reference-actions">
+          <button
+            type="button"
+            className="dashboard-reference-home-btn"
+            onClick={() => navigateApp('landing')}
+            title="Lihat Halaman Beranda (Tampilan Awal)"
+          >
+            Beranda
+          </button>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <span className="dashboard-reference-avatar" aria-label={`Akun ${currentUser.username}`}>{currentUser.username.charAt(0).toUpperCase()}</span>
           <button className="dashboard-reference-logout" onClick={logout}><LineIcon type="logout" /> Keluar</button>
@@ -1022,7 +1136,7 @@ function App() {
                       </span>
                     </div>
 
-                    <b className="history-score">
+                    <b className={`history-score${Number(item.similarity_index) < 20 ? ' history-score-clean' : ''}`}>
                       {Number(item.similarity_index).toFixed(2)}%
                     </b>
 
@@ -1199,7 +1313,7 @@ function ThemeToggle({ theme, onToggle }) {
   return <button className="theme-toggle" type="button" onClick={onToggle} aria-label={isDark ? 'Aktifkan mode terang' : 'Aktifkan mode gelap'} title={isDark ? 'Mode terang' : 'Mode gelap'}><span className="theme-toggle-icon"><LineIcon type={isDark ? 'sun' : 'moon'} /></span><span className="theme-toggle-label">{isDark ? 'Terang' : 'Gelap'}</span></button>
 }
 
-function LandingPage({ theme, onToggleTheme, onStart }) {
+function LandingPage({ theme, onToggleTheme, onStart, token }) {
   return (
     <main className="landing-page">
       <div className="landing-ambient-orb landing-orb-hero-orange" aria-hidden="true" />
@@ -1217,7 +1331,7 @@ function LandingPage({ theme, onToggleTheme, onStart }) {
           <a href="#fitur">Keunggulan</a>
           <a href="#keamanan">Keamanan</a>
         </nav>
-        <div className="landing-nav-actions"><ThemeToggle theme={theme} onToggle={onToggleTheme} /><button className="nav-login" onClick={onStart}>Masuk ke aplikasi</button></div>
+        <div className="landing-nav-actions"><ThemeToggle theme={theme} onToggle={onToggleTheme} /><button className="nav-login" onClick={onStart}>{token ? 'Buka Dashboard ↗' : 'Masuk ke aplikasi'}</button></div>
       </header>
 
       <section className="landing-hero" id="top">
@@ -1225,7 +1339,7 @@ function LandingPage({ theme, onToggleTheme, onStart }) {
           <p className="landing-kicker">RUANG KERJA AKADEMIK DIGITAL</p>
           <h1>Temukan kemiripan.<br /><em>Jaga orisinalitas.</em></h1>
           <p className="hero-description">Analisis dokumen akademik dengan alur yang sederhana, hasil yang transparan, dan laporan yang siap digunakan.</p>
-          <div className="hero-actions"><button className="hero-button" onClick={onStart}>Mulai pemeriksaan <span className="hero-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 18 17 7M9 7h8v8" /></svg></span></button><a href="#cara-kerja" className="hero-secondary">Lihat cara kerja</a></div>
+          <div className="hero-actions"><button className="hero-button" onClick={onStart}>{token ? 'Buka Dashboard' : 'Mulai pemeriksaan'} <span className="hero-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 18 17 7M9 7h8v8" /></svg></span></button><a href="#cara-kerja" className="hero-secondary">Lihat cara kerja</a></div>
           <div className="hero-proof"><span className="proof-dot"></span><span>PDF & DOCX</span><span className="proof-divider">•</span><span>Berbasis sumber akademik</span></div>
         </div>
         <div className="hero-art"><img className="hero-illustration" src={theme === 'dark' ? heroIllustrationDark : heroIllustration} alt="Ilustrasi analisis kemiripan dokumen" /></div>
@@ -1240,7 +1354,7 @@ function LandingPage({ theme, onToggleTheme, onStart }) {
         <div className="feature-list"><article><span><LineIcon type="evidence" /></span><div><h3>Evidence-first</h3><p>Hasil dilengkapi potongan sumber agar angka dapat dipahami dan ditinjau.</p></div></article><article><span><LineIcon type="archive" /></span><div><h3>Rapi sejak awal</h3><p>Riwayat analisis tersimpan teratur dan report dapat dibuka kembali.</p></div></article><article id="keamanan"><span><LineIcon type="shield" /></span><div><h3>Workspace privat</h3><p>Akses dibatasi akun pengguna dan dokumen tidak masuk repository publik.</p></div></article></div>
       </section>
 
-      <section className="landing-cta"><div className="cta-deco cta-doc"><img className="cta-doc-image" src={gambar4} alt="Dokumen akademik terlindungi" /></div><div className="cta-content"><p className="landing-kicker">SIAP MEMULAI?</p><h2>Jadikan pemeriksaan akademik<br /><em>lebih tenang dan terukur.</em></h2><button className="hero-button" onClick={onStart}>Masuk ke workspace <span className="hero-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 18 17 7M9 7h8v8" /></svg></span></button></div><div className="cta-deco cta-chart"><img className="cta-chart-image" src={gambar5} alt="Grafik analisis akademik" /></div></section>
+      <section className="landing-cta"><div className="cta-deco cta-doc"><img className="cta-doc-image" src={gambar4} alt="Dokumen akademik terlindungi" /></div><div className="cta-content"><p className="landing-kicker">SIAP MEMULAI?</p><h2>Jadikan pemeriksaan akademik<br /><em>lebih tenang dan terukur.</em></h2><button className="hero-button" onClick={onStart}>{token ? 'Buka Dashboard' : 'Masuk ke workspace'} <span className="hero-arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 18 17 7M9 7h8v8" /></svg></span></button></div><div className="cta-deco cta-chart"><img className="cta-chart-image" src={gambar5} alt="Grafik analisis akademik" /></div></section>
       <footer className="landing-footer"><strong>AntiKopas</strong><span>Academic similarity workspace</span><span>© 2026</span></footer>
     </main>
   )
