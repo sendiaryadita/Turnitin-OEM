@@ -913,7 +913,7 @@ function App() {
 
   // Administrator menggunakan dashboard pengelolaan, bukan workspace analisis user.
   if (currentUser.role === 'admin') {
-    const apiUrl = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
+    const apiUrl = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8000/api' : '/api')
     const adminUrl = new URL('/admin/', new URL(apiUrl, window.location.origin)).href
 
     return (
