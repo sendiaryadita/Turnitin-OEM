@@ -863,7 +863,7 @@ function App() {
           <img className="auth-visual-art" src={heroIllustrationOriginal} alt="Ilustrasi analisis dokumen" />
           <div className="auth-visual-copy"><h2>Analisis Dokumen<br />Tanpa Ragu</h2><p>Aman, Cepat, dan Akurat.</p></div>
         </section>
-        <section className="auth-card">
+        <section className="auth-card" key={showRegister ? 'register' : 'login'}>
           <ThemeToggle theme={theme} onToggle={toggleTheme} />
           <button className="back-link" onClick={() => { navigateApp('landing'); setShowLogin(false); setShowRegister(false) }}>← Kembali ke beranda</button>
           <div className="auth-brand"><img className="brand-image auth-logo" src={logo} alt="Logo AntiKopas" /><span>Anti<span>Kopas</span></span></div>

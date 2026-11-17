@@ -25,7 +25,8 @@ async function request(path, options = {}, canRefresh = true) {
   }
   const data = await response.json().catch(() => ({}))
   if (!response.ok) {
-    const message = Array.isArray(data.message) ? data.message.join(' ') : data.message
+    const rawMessage = data.detail || data.message
+    const message = Array.isArray(rawMessage) ? rawMessage.join(' ') : rawMessage
     throw new Error(message || `Request gagal (${response.status})`)
   }
   return data

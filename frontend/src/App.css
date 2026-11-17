@@ -18,6 +18,22 @@
 .auth-visual-brand { position: relative; z-index: 2; display: flex; align-items: center; gap: 12px; color: #fff; font-size: 24px; font-weight: 900; letter-spacing: -.04em; }.auth-visual-brand img { width: 48px; height: 48px; border-radius: 13px; }.auth-visual-brand > span span { color: #f06b55; }
 .auth-visual-art { position: relative; z-index: 1; display: block; width: min(100%, 560px); margin: auto; border-radius: 22px; background: transparent; box-shadow: none; }
 .auth-visual-copy { position: relative; z-index: 2; margin-top: auto; text-align: center; }.auth-visual-copy h2 { color: #fff; font-size: clamp(36px, 4vw, 64px); letter-spacing: -.06em; line-height: .98; margin-bottom: 18px; }.auth-visual-copy p { color: #f3a08e; font-size: clamp(18px, 2vw, 26px); }
+@keyframes authCardEntrance {
+  0% {
+    opacity: 0;
+    transform: scale(0.91) translateY(14px);
+    filter: blur(8px);
+  }
+  65% {
+    opacity: 1;
+    filter: blur(0px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+    filter: blur(0px);
+  }
+}
 .auth-card {
   align-self: center;
   box-sizing: border-box;
@@ -27,15 +43,17 @@
   margin: auto;
   padding: 46px clamp(32px, 5vw, 48px) 42px;
   background: rgba(255, 255, 255, 0.88);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
   border: 1px solid rgba(255, 255, 255, 0.95);
   border-radius: 26px;
   box-shadow:
     0 24px 60px rgba(40, 35, 79, 0.08),
     0 4px 16px rgba(40, 35, 79, 0.04),
-    inset 0 1px 0 rgba(255, 255, 255, 1);
+    inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 1);
   position: relative;
+  animation: authCardEntrance 0.62s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity, filter;
 }
 .back-link {
   padding: 0;
@@ -1118,15 +1136,21 @@ html[data-theme='dark'] .auth-visual::after {
 html[data-theme='dark'] .auth-card {
   position: relative;
   z-index: 1;
-  background: rgba(17, 26, 76, 0.72);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: linear-gradient(
+    138deg,
+    rgba(255, 255, 255, 0.12) 0%,
+    rgba(28, 38, 92, 0.58) 45%,
+    rgba(15, 22, 65, 0.78) 100%
+  );
+  backdrop-filter: blur(28px) saturate(190%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%);
+  border: 1px solid rgba(255, 255, 255, 0.18);
   border-radius: 26px;
   box-shadow:
-    0 24px 60px rgba(0, 0, 0, 0.55),
-    0 0 45px rgba(240, 107, 85, 0.14),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+    inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 0.35),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.25),
+    0 28px 65px rgba(0, 0, 0, 0.55),
+    0 0 50px rgba(240, 107, 85, 0.16);
   padding: 46px clamp(32px, 5vw, 48px) 42px;
   max-width: 550px;
 }
@@ -1141,22 +1165,31 @@ html[data-theme='dark'] .auth-card .muted {
   margin-bottom: 24px;
 }
 html[data-theme='dark'] .auth-card input {
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   color: #f8f7ff;
-  background: rgba(10, 16, 50, 0.75);
+  background: rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   border-radius: 12px;
   padding: 14px 16px;
   font-size: 15px;
-  transition: all 0.2s ease;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 html[data-theme='dark'] .auth-card input:focus {
   border-color: #f06b55;
-  outline: 3px solid rgba(240, 107, 85, 0.22);
-  background: rgba(12, 19, 58, 0.9);
+  background: rgba(255, 255, 255, 0.09);
+  outline: none;
+  box-shadow:
+    0 0 0 3px rgba(240, 107, 85, 0.25),
+    0 4px 16px rgba(240, 107, 85, 0.2),
+    inset 0 1px 2px rgba(255, 255, 255, 0.15);
 }
 html[data-theme='dark'] .auth-card .theme-toggle {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(17, 26, 76, 0.85);
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   color: #f8f7ff;
   top: 30px;
   right: 32px;
@@ -2895,12 +2928,31 @@ html:not([data-theme='dark']) .auth-shell {
 }
 
 html:not([data-theme='dark']) .auth-card {
-  background: rgba(255, 255, 255, 0.92) !important;
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid rgba(229, 225, 220, 0.95) !important;
+  background: linear-gradient(
+    138deg,
+    rgba(255, 255, 255, 0.90) 0%,
+    rgba(255, 255, 255, 0.70) 100%
+  ) !important;
+  backdrop-filter: blur(28px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(28px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.9) !important;
   border-radius: 26px !important;
-  box-shadow: 0 24px 60px rgba(30, 27, 75, 0.08), 0 4px 16px rgba(30, 27, 75, 0.03) !important;
+  box-shadow:
+    inset 0 1.5px 1.5px 0 rgba(255, 255, 255, 1),
+    0 24px 60px rgba(30, 27, 75, 0.09),
+    0 6px 18px rgba(30, 27, 75, 0.04) !important;
+}
+html:not([data-theme='dark']) .auth-card input {
+  background: rgba(255, 255, 255, 0.72) !important;
+  border: 1px solid rgba(203, 213, 225, 0.85) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+html:not([data-theme='dark']) .auth-card input:focus {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: #f06b55 !important;
+  box-shadow: 0 0 0 3px rgba(240, 107, 85, 0.2), 0 4px 12px rgba(240, 107, 85, 0.12) !important;
 }
 
 html:not([data-theme='dark']) .auth-ambient-orb {
