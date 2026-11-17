@@ -1427,8 +1427,29 @@ function FlowArrow({ className, curve }) {
   return (
     <div className={`alur-arrow ${className}`} aria-hidden="true">
       <svg viewBox="0 0 100 20" fill="none">
-        <path className="alur-arrow-line" d={path} stroke="#f06b55" strokeWidth="2" strokeLinecap="round" />
-        <polyline points="93,5 100,10 93,15" stroke="#f06b55" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+        <path
+          className="alur-arrow-line"
+          d={path}
+          stroke="#f06b55"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeDasharray="6 7"
+        >
+          <animate
+            attributeName="stroke-dashoffset"
+            from="26"
+            to="0"
+            dur="1.2s"
+            repeatCount="indefinite"
+          />
+        </path>
+        <polyline
+          points="93,5 100,10 93,15"
+          stroke="#f06b55"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
       </svg>
     </div>
   )
