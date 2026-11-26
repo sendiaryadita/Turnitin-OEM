@@ -1,7 +1,11 @@
+from datetime import timedelta
+
+from django.conf import settings
 from django.contrib.auth.models import User
 from django.db import models
-from datetime import timedelta
+from django.db.models.functions import Coalesce
 from django.utils import timezone
+
 
 class Document(models.Model):
     """Dokumen akademik yang dikirim untuk dianalisis."""
@@ -34,6 +38,28 @@ class Document(models.Model):
         return self.title
 
 
+class AnalysisJobQuerySet(models.QuerySet):
+    def with_expiration(self):
+        finished = Coalesce("completed_at", "started_at", "created_at")
+        active = Coalesce("started_at", "created_at")
+        return self.annotate(
+            _expires_at=models.Case(
+                models.When(
+                    status__in=["completed", "failed"],
+                    then=finished + timedelta(hours=settings.ANALYSIS_RETENTION_HOURS),
+                ),
+                default=active + timedelta(hours=settings.ANALYSIS_STALE_HOURS),
+                output_field=models.DateTimeField(),
+            )
+        )
+
+    def active(self, at=None):
+        return self.with_expiration().filter(_expires_at__gt=at or timezone.now())
+
+    def expired(self, at=None):
+        return self.with_expiration().filter(_expires_at__lte=at or timezone.now())
+
+
 class AnalysisJob(models.Model):
     """Satu proses analisis terhadap sebuah dokumen."""
 
@@ -55,7 +81,7 @@ class AnalysisJob(models.Model):
         db_index=True,
     )
 
-        # Progress pemeriksaan dokumen
+    # Progress pemeriksaan dokumen
     progress_percent = models.PositiveSmallIntegerField(
         default=0
     )
@@ -76,26 +102,31 @@ class AnalysisJob(models.Model):
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 
+    objects = AnalysisJobQuerySet.as_manager()
+
     class Meta:
         ordering = ["-created_at"]
 
     def __str__(self):
         return f"Analysis #{self.pk} - {self.document.title}"
 
-        # ==========================================
+    # ==========================================
     # MASA SIMPAN HASIL ANALISIS: 2 JAM
     # ==========================================
 
     @property
     def expires_at(self):
         """
-        Menghitung waktu kedaluwarsa berdasarkan
-        waktu selesainya analisis.
+        Hasil selesai/gagal: sejak selesai (fallback mulai/dibuat).
+        Pending/processing: batas proses dihitung sejak mulai/dibuat.
         """
-        if self.completed_at is None:
-            return None
-
-        return self.completed_at + timedelta(hours=2)
+        if self.status in {self.Status.COMPLETED, self.Status.FAILED}:
+            anchor = self.completed_at or self.started_at or self.created_at
+            hours = settings.ANALYSIS_RETENTION_HOURS
+        else:
+            anchor = self.started_at or self.created_at
+            hours = settings.ANALYSIS_STALE_HOURS
+        return anchor + timedelta(hours=hours) if anchor else None
 
     @property
     def is_expired(self):

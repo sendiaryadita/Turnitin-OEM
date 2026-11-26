@@ -15,6 +15,7 @@ from django.core.exceptions import ValidationError
 from django.http import FileResponse
 from django.conf import settings
 from django.core.files import File
+from django.db.models import Q
 
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated, AllowAny
@@ -28,6 +29,7 @@ from .models import (
     SimilarityResult,
     SourceJournal,
 )
+from .services.history_cleanup import delete_analysis
 
 ALLOWED_DOCUMENT_EXTENSIONS = {".pdf", ".docx"}
 MAX_DOCUMENT_SIZE = 25 * 1024 * 1024
@@ -116,7 +118,7 @@ def analysis_list(request):
 
     jobs = AnalysisJob.objects.select_related("document").filter(
         document__uploaded_by=request.user
-    )
+    ).active()
     query = str(request.query_params.get("q", "")).strip()
     status = str(request.query_params.get("status", "")).strip().lower()
     if query:
@@ -157,6 +159,7 @@ def analysis_list(request):
                 "matched_chunks": job.matched_chunks,
                 "created_at": job.created_at,
                 "completed_at": job.completed_at,
+                "expires_at": job.expires_at,
                 "report_url": (
                     request.build_absolute_uri(
                         f"/api/reports/{os.path.basename(job.report.file.name)}/"
@@ -183,6 +186,9 @@ def analysis_detail(request, analysis_id):
             "message": "Analisis tidak ditemukan",
         }, status=404)
 
+    if request.method != "DELETE" and job.is_expired:
+        return expired_response()
+
     if request.method == "PATCH":
         title = str(request.data.get("title", "")).strip()
         if not title:
@@ -194,14 +200,7 @@ def analysis_detail(request, analysis_id):
         return Response({"status": "success", "message": "Judul berhasil diperbarui", "title": title})
 
     if request.method == "DELETE":
-        document = job.document
-        report = getattr(job, "report", None)
-        if report and report.file:
-            report.file.delete(save=False)
-        if document.original_file:
-            document.original_file.delete(save=False)
-        job.delete()
-        document.delete()
+        delete_analysis(job.pk)
         return Response({
             "status": "success",
             "message": "Riwayat analisis berhasil dihapus",
@@ -234,7 +233,9 @@ def analysis_detail(request, analysis_id):
 
     report_url = None
     if hasattr(job, "report") and job.report.file:
-        report_url = request.build_absolute_uri(job.report.file.url)
+        report_url = request.build_absolute_uri(
+            f"/api/reports/{os.path.basename(job.report.file.name)}/"
+        )
 
     return Response({
         "status": "success",
@@ -251,6 +252,7 @@ def analysis_detail(request, analysis_id):
             "matched_chunks": job.matched_chunks,
             "created_at": job.created_at,
             "completed_at": job.completed_at,
+            "expires_at": job.expires_at,
         },
         "chunks": chunks,
         "report_url": report_url,
@@ -260,7 +262,7 @@ def analysis_detail(request, analysis_id):
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def analysis_stats(request):
-    jobs = AnalysisJob.objects.filter(document__uploaded_by=request.user)
+    jobs = AnalysisJob.objects.filter(document__uploaded_by=request.user).active()
     completed = jobs.filter(status=AnalysisJob.Status.COMPLETED)
     total_chunks = sum(jobs.values_list("total_chunks", flat=True))
     matched_chunks = sum(jobs.values_list("matched_chunks", flat=True))
@@ -272,6 +274,7 @@ def analysis_stats(request):
     return Response({
         "status": "success",
         "total_analyses": jobs.count(),
+        "retention_seconds": settings.ANALYSIS_RETENTION_HOURS * 3600,
         "completed_analyses": completed.count(),
         "processing_analyses": jobs.filter(
             status__in=[AnalysisJob.Status.PENDING, AnalysisJob.Status.PROCESSING]
@@ -365,13 +368,12 @@ def detect_similarity(request):
         status=AnalysisJob.Status.PROCESSING,
         progress_percent=2,
         progress_stage="Membaca dokumen",
-        started_at=datetime.now(),
+        started_at=timezone.now(),
     )
 
     # Import service berat hanya setelah input dasar valid.
     # Health check, startup, dan validasi request tidak perlu memuat
     # Torch/model AI terlebih dahulu.
-    from .services.antikopas_service import analyze_antikopas
     from .services.document_parser import extract_text
     from .services.report_generator import generate_report
 
@@ -423,7 +425,7 @@ def detect_similarity(request):
         """Catat kegagalan tanpa mengubah progress menjadi 100%."""
         analysis_job.status = AnalysisJob.Status.FAILED
         analysis_job.error_message = str(error)
-        analysis_job.completed_at = datetime.now()
+        analysis_job.completed_at = timezone.now()
         analysis_job.progress_stage = "Pemeriksaan gagal"
         analysis_job.save(update_fields=[
             "status",
@@ -473,6 +475,8 @@ def detect_similarity(request):
     # --------------------------------------
 
     try:
+        from .services.antikopas_service import analyze_antikopas
+
         analysis = analyze_antikopas(
             text,
             title,
@@ -813,6 +817,8 @@ def detect_similarity(request):
 
         "report_filename": report_filename,
 
+        "expires_at": analysis_job.expires_at,
+
         "report_url": report_url
 
     })
@@ -829,11 +835,6 @@ def download_report(
     filename
 ):
 
-    report_directory = os.path.join(
-        settings.BASE_DIR,
-        "reports"
-    )
-
     safe_filename = os.path.basename(
         filename
     )
@@ -841,7 +842,8 @@ def download_report(
     # Hanya izinkan file PDF yang
     # dibuat oleh sistem AntiKopas.
     if (
-        not safe_filename.startswith(
+        filename != safe_filename
+        or not safe_filename.startswith(
             "antikopas_report_"
         )
         or not safe_filename.endswith(
@@ -853,13 +855,8 @@ def download_report(
             "message": "Nama report tidak valid"
         }, status=400)
 
-    report_path = os.path.join(
-        report_directory,
-        safe_filename
-    )
-
     report_record = Report.objects.filter(
-        file__endswith=safe_filename,
+        Q(file=safe_filename) | Q(file__endswith="/" + safe_filename),
         analysis__document__uploaded_by=request.user,
     ).select_related("analysis__document").first()
     if report_record is None:
@@ -868,13 +865,35 @@ def download_report(
             "message": "Report tidak ditemukan",
         }, status=404)
 
-    if not os.path.isfile(
-        report_path
-    ):
-        return Response({
-            "status": "error",
-            "message": "Report tidak ditemukan"
-        }, status=404)
+    return report_response(report_record)
+
+
+def expired_response():
+    response = Response({
+        "status": "error",
+        "code": "analysis_expired",
+        "message": "Masa simpan analisis sudah berakhir. Silakan unggah ulang dokumen.",
+    }, status=410)
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+def report_response(report_record):
+    if report_record.analysis.is_expired:
+        return expired_response()
+
+    # FileField adalah lokasi utama; salinan lama tetap didukung.
+    try:
+        report_file = report_record.file.open("rb")
+    except FileNotFoundError:
+        directory = (Path(settings.BASE_DIR) / "reports").resolve()
+        report_path = (directory / Path(report_record.file.name).name).resolve()
+        if report_path.parent != directory:
+            return Response({"message": "Report tidak ditemukan"}, status=404)
+        try:
+            report_file = report_path.open("rb")
+        except FileNotFoundError:
+            return Response({"message": "Report tidak ditemukan"}, status=404)
 
     document = report_record.analysis.document
     original_title = Path(document.original_file.name).stem
@@ -883,9 +902,40 @@ def download_report(
     )[:70].strip("-")
     download_filename = f"antikopas_{title_slug}_AK-{report_record.analysis_id}.pdf"
 
-    return FileResponse(
-        open(report_path, "rb"),
+    response = FileResponse(
+        report_file,
         as_attachment=True,
         filename=download_filename,
         content_type="application/pdf"
     )
+    response["Cache-Control"] = "private, no-store"
+    return response
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def download_media(request, filename):
+    """Lindungi URL FileField yang sebelumnya dilayani sebagai file publik."""
+    document = Document.objects.filter(
+        original_file=filename, uploaded_by=request.user,
+    ).first()
+    if document is not None:
+        if not document.analyses.active().exists():
+            return expired_response()
+        try:
+            document_file = document.original_file.open("rb")
+        except FileNotFoundError:
+            return Response({"message": "Dokumen tidak ditemukan"}, status=404)
+        response = FileResponse(
+            document_file, as_attachment=True,
+            filename=Path(document.original_file.name).name,
+        )
+        response["Cache-Control"] = "private, no-store"
+        return response
+
+    report = Report.objects.filter(
+        file=filename, analysis__document__uploaded_by=request.user,
+    ).select_related("analysis__document").first()
+    if report is not None:
+        return report_response(report)
+    return Response({"message": "File tidak ditemukan"}, status=404)

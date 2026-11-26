@@ -1,197 +1,48 @@
-import os
-from datetime import timedelta
-from pathlib import Path
+import math
+from threading import Event
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
-from django.utils import timezone
+from django.core.management.base import BaseCommand, CommandError
+from django.test.utils import override_settings
 
-from detector.models import AnalysisJob
+from detector.services.history_cleanup import cleanup_expired_analyses, run_cleanup_loop
 
 
 class Command(BaseCommand):
-    help = (
-        "Menghapus hasil analisis AntiKopas yang sudah melewati masa simpan. "
-        "Default: 2 jam sejak completed_at."
-    )
+    help = "Hapus analisis kedaluwarsa dan file terkait; --watch untuk worker berkala."
 
     def add_arguments(self, parser):
-        parser.add_argument(
-            "--dry-run",
-            action="store_true",
-            help="Hanya menampilkan data yang akan dihapus tanpa menghapus apa pun.",
-        )
-        parser.add_argument(
-            "--hours",
-            type=float,
-            default=2.0,
-            help="Masa simpan dalam jam. Default: 2.",
-        )
+        parser.add_argument("--dry-run", action="store_true", help="Simulasi tanpa menghapus data.")
+        parser.add_argument("--hours", type=float, default=None, help="Override retensi hasil (jam).")
+        parser.add_argument("--limit", type=int, default=1000, help="Batas job per putaran sekali jalan.")
+        parser.add_argument("--watch", action="store_true", help="Bersihkan terus sampai Ctrl+C.")
+        parser.add_argument("--interval", type=float, default=None, help="Interval worker dalam detik.")
 
     def handle(self, *args, **options):
-        dry_run = options["dry_run"]
-        retention_hours = options["hours"]
+        hours = options["hours"] if options["hours"] is not None else settings.ANALYSIS_RETENTION_HOURS
+        interval = options["interval"] if options["interval"] is not None else settings.HISTORY_CLEANUP_INTERVAL_SECONDS
+        if not all(math.isfinite(value) and value > 0 for value in (hours, interval)):
+            raise CommandError("--hours dan --interval harus berupa angka positif.")
+        if options["limit"] <= 0:
+            raise CommandError("--limit harus lebih dari 0.")
+        if options["watch"] and (options["dry_run"] or options["limit"] != 1000):
+            raise CommandError("--watch tidak digabung dengan --dry-run atau --limit.")
 
-        if retention_hours <= 0:
-            self.stderr.write(
-                self.style.ERROR("--hours harus lebih besar dari 0.")
+        with override_settings(ANALYSIS_RETENTION_HOURS=hours):
+            if options["watch"]:
+                self.stdout.write(f"Worker cleanup aktif, interval {interval:g} detik. Ctrl+C untuk berhenti.")
+                try:
+                    run_cleanup_loop(Event(), interval)
+                except KeyboardInterrupt:
+                    self.stdout.write("Worker cleanup dihentikan.")
+                return
+            result = cleanup_expired_analyses(
+                dry_run=options["dry_run"], limit=options["limit"]
             )
-            return
-
-        now = timezone.now()
-        cutoff = now - timedelta(hours=retention_hours)
-
-        expired_jobs = (
-            AnalysisJob.objects
-            .select_related("document")
-            .filter(
-                status__in=[
-                    AnalysisJob.Status.COMPLETED,
-                    AnalysisJob.Status.FAILED,
-                ],
-                completed_at__isnull=False,
-                completed_at__lte=cutoff,
-            )
-            .order_by("completed_at")
-        )
-
-        total = expired_jobs.count()
-        mode = "DRY RUN" if dry_run else "DELETE"
-
+        mode = "DRY RUN" if options["dry_run"] else "DELETE"
         self.stdout.write(
-            f"[AntiKopas Cleanup] Mode={mode} | "
-            f"retention={retention_hours:g} jam | "
-            f"kandidat={total}"
+            f"{mode} | kandidat={result['candidates']} | "
+            f"dihapus={result['deleted']} | gagal={result['errors']}"
         )
-
-        if total == 0:
-            self.stdout.write(
-                self.style.SUCCESS(
-                    "[AntiKopas Cleanup] Tidak ada data kedaluwarsa."
-                )
-            )
-            return
-
-        deleted_jobs = 0
-        deleted_documents = 0
-        deleted_legacy_reports = 0
-        failed_deletions = 0
-
-        for job in expired_jobs.iterator():
-            document = job.document
-            job_id = job.pk
-            title = document.title
-            completed_at = job.completed_at
-            expires_at = completed_at + timedelta(hours=retention_hours)
-
-            # Saat ini satu Document biasanya memiliki satu AnalysisJob.
-            # Pengecekan ini mencegah file dokumen ikut terhapus jika suatu
-            # saat satu dokumen dipakai oleh lebih dari satu job.
-            has_other_jobs = document.analyses.exclude(pk=job.pk).exists()
-
-            report = getattr(job, "report", None)
-
-            report_storage_name = ""
-            report_basename = ""
-
-            if report is not None and report.file:
-                report_storage_name = str(report.file.name or "")
-                report_basename = os.path.basename(report_storage_name)
-
-            document_storage_name = (
-                str(document.original_file.name or "")
-                if document.original_file
-                else ""
-            )
-
-            # views.py saat ini membuat PDF awal di BASE_DIR/reports/<filename>
-            # lalu juga menyimpannya ke FileField Report. Karena itu cleanup
-            # perlu membersihkan file report "flat" ini juga agar storage server
-            # tidak terus menumpuk.
-            legacy_report_path = (
-                Path(settings.BASE_DIR) / "reports" / report_basename
-                if report_basename
-                else None
-            )
-
-            if dry_run:
-                self.stdout.write(
-                    f"  - Job #{job_id} | {job.status} | "
-                    f"{title!r} | expired={expires_at.isoformat()}"
-                )
-
-                if report_storage_name:
-                    self.stdout.write(
-                        f"      report storage: {report_storage_name}"
-                    )
-
-                if legacy_report_path is not None:
-                    self.stdout.write(
-                        f"      report runtime: {legacy_report_path}"
-                    )
-
-                if document_storage_name and not has_other_jobs:
-                    self.stdout.write(
-                        f"      document: {document_storage_name}"
-                    )
-
-                continue
-
-            try:
-                # FileField tidak otomatis menghapus file fisik ketika row DB
-                # dihapus, jadi file pada storage dibersihkan lebih dulu.
-                if report is not None and report.file:
-                    report.file.delete(save=False)
-
-                # Bersihkan PDF hasil generate yang dipakai endpoint download.
-                if (
-                    legacy_report_path is not None
-                    and legacy_report_path.is_file()
-                ):
-                    legacy_report_path.unlink()
-                    deleted_legacy_reports += 1
-
-                if not has_other_jobs and document.original_file:
-                    document.original_file.delete(save=False)
-
-                # Cascade dari AnalysisJob membersihkan Report, DocumentChunk,
-                # SimilarityResult, dan relasi lain dengan on_delete=CASCADE.
-                job.delete()
-                deleted_jobs += 1
-
-                if not has_other_jobs:
-                    document.delete()
-                    deleted_documents += 1
-
-                self.stdout.write(
-                    self.style.SUCCESS(
-                        f"  [OK] Job expired dihapus: #{job_id} - {title}"
-                    )
-                )
-
-            except Exception as exc:
-                failed_deletions += 1
-                self.stderr.write(
-                    self.style.ERROR(
-                        f"  [GAGAL] Job #{job_id} - {title}: {exc}"
-                    )
-                )
-
-        if dry_run:
-            self.stdout.write(
-                self.style.WARNING(
-                    f"[AntiKopas Cleanup] DRY RUN selesai. "
-                    f"{total} job akan dihapus."
-                )
-            )
-            return
-
-        self.stdout.write(
-            self.style.SUCCESS(
-                "[AntiKopas Cleanup] Selesai | "
-                f"job={deleted_jobs} | "
-                f"document={deleted_documents} | "
-                f"report_runtime={deleted_legacy_reports} | "
-                f"gagal={failed_deletions}"
-            )
-        )
+        if result["errors"]:
+            raise CommandError("Sebagian file gagal dihapus; data disisakan untuk dicoba ulang.")

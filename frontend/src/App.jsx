@@ -66,6 +66,10 @@ function App() {
   const [analysisProgress, setAnalysisProgress] = useState(0)
   const [analysisStage, setAnalysisStage] = useState('Menunggu proses')
   const [message, setMessage] = useState('')
+  const retentionSeconds = Number(stats?.retention_seconds)
+  const retentionLabel = retentionSeconds > 0
+    ? ` selama ${new Intl.NumberFormat('id-ID', { maximumFractionDigits: 1 }).format(retentionSeconds >= 3600 ? retentionSeconds / 3600 : retentionSeconds / 60)} ${retentionSeconds >= 3600 ? 'jam' : 'menit'}`
+    : ''
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     localStorage.setItem('antikopas_theme', theme)
@@ -619,11 +623,49 @@ function App() {
 
   useEffect(() => {
     if (!token || currentUser?.role !== 'user') return undefined
-    const timer = window.setInterval(() => {
-      if (analyses.some((item) => item.status === 'pending' || item.status === 'processing')) loadAnalyses()
-    }, 3000)
-    return () => window.clearInterval(timer)
-  }, [token, currentUser?.role, analyses, loadAnalyses])
+    let refreshing = false
+    let cancelled = false
+
+    async function refreshDashboard() {
+      if (cancelled) return
+      const now = Date.now()
+      const hasExpired = (item) => item?.expires_at && Date.parse(item.expires_at) <= now
+
+      // Hapus hasil lokal juga, termasuk jika koneksi API sedang terganggu.
+      setAnalyses((current) => {
+        const active = current.filter((item) => !hasExpired(item))
+        return active.length === current.length ? current : active
+      })
+      setEditingAnalysis((current) => hasExpired(current) ? null : current)
+      if (hasExpired(result)) {
+        setResult(null)
+        setMessage('Masa simpan hasil analisis sudah berakhir. Silakan unggah ulang dokumen.')
+      }
+
+      if (refreshing) return
+      refreshing = true
+      try {
+        await Promise.all([loadAnalyses(), loadStats()])
+      } finally {
+        refreshing = false
+      }
+    }
+
+    function refreshWhenVisible() {
+      if (document.visibilityState === 'visible') refreshDashboard()
+    }
+
+    // Tetap periksa hasil yang sudah selesai agar kedaluwarsa terlihat otomatis.
+    const timer = window.setInterval(refreshWhenVisible, 3000)
+    window.addEventListener('focus', refreshWhenVisible)
+    document.addEventListener('visibilitychange', refreshWhenVisible)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+      window.removeEventListener('focus', refreshWhenVisible)
+      document.removeEventListener('visibilitychange', refreshWhenVisible)
+    }
+  }, [token, currentUser?.role, loadAnalyses, loadStats, result])
 
   async function handleLogin(event) {
     event.preventDefault()
@@ -739,7 +781,7 @@ function App() {
   }
 
   async function handleRename(item) {
-    setEditingAnalysis({ id: item.id, title: item.title, error: '' })
+    setEditingAnalysis({ id: item.id, title: item.title, expires_at: item.expires_at, error: '' })
   }
 
   async function handleSaveRename(event) {
@@ -1015,7 +1057,7 @@ function App() {
             <div className="retention-warning">
               <span className="retention-warning-icon">!</span>
               <div>
-                <strong>Hasil disimpan sementara selama 2 jam</strong>
+                <strong>Hasil disimpan sementara{retentionLabel}</strong>
                 <p>
                   Dokumen, hasil analisis, dan laporan PDF akan dihapus otomatis setelah masa penyimpanan berakhir.
                   Unduh laporan setelah analisis selesai agar hasil tetap tersimpan di perangkat Anda.

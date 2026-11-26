@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 """
 
 import os
+import math
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -54,6 +55,7 @@ if not SECRET_KEY:
 
 INSTALLED_APPS = [
     'corsheaders',
+    'detector',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -61,7 +63,6 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
-    'detector',
 ]
 
 REST_FRAMEWORK = {
@@ -92,6 +93,21 @@ CORS_ALLOWED_ORIGINS = [
     ).split(',')
     if origin.strip()
 ]
+
+
+def positive_number_setting(name, default):
+    value = float(os.getenv(name, default))
+    if not math.isfinite(value) or value <= 0:
+        raise ValueError(f"{name} harus berupa angka positif.")
+    return value
+
+
+# Hasil selesai/gagal: 2 jam. Proses tanpa penyelesaian: maksimal 24 jam.
+ANALYSIS_RETENTION_HOURS = positive_number_setting("ANALYSIS_RETENTION_HOURS", 2)
+ANALYSIS_STALE_HOURS = positive_number_setting("ANALYSIS_STALE_HOURS", 24)
+HISTORY_CLEANUP_INTERVAL_SECONDS = positive_number_setting(
+    "HISTORY_CLEANUP_INTERVAL_SECONDS", 60
+)
 
 ROOT_URLCONF = 'config.urls'
 
