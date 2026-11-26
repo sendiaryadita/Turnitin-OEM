@@ -1,0 +1,22 @@
+{% load i18n %}
+<div class="ak-theme-switcher">
+    <button class="theme-toggle" type="button" title="Ganti tema">
+        <span class="visually-hidden theme-label-when-auto">{% translate 'Toggle theme (current theme: auto)' %}</span>
+        <span class="visually-hidden theme-label-when-light">{% translate 'Toggle theme (current theme: light)' %}</span>
+        <span class="visually-hidden theme-label-when-dark">{% translate 'Toggle theme (current theme: dark)' %}</span>
+        <svg aria-hidden="true" class="theme-icon-when-auto"><use xlink:href="#icon-auto"/></svg>
+        <svg aria-hidden="true" class="theme-icon-when-dark"><use xlink:href="#icon-moon"/></svg>
+        <svg aria-hidden="true" class="theme-icon-when-light"><use xlink:href="#icon-sun"/></svg>
+    </button>
+    <details class="ak-theme-menu" data-ak-dropdown>
+        <summary class="ak-theme-trigger" aria-label="Pilih tema" title="Pilih tema">
+            {% include "admin/partials/ak_icon.html" with name="chevron" %}
+        </summary>
+        <div class="ak-theme-options" data-ak-dropdown-panel role="group" aria-label="Pilihan tema">
+            <p>Tampilan</p>
+            <button type="button" data-ak-theme="light" aria-pressed="false">{% include "admin/partials/ak_icon.html" with name="sun" %}<span>Mode terang</span></button>
+            <button type="button" data-ak-theme="dark" aria-pressed="false">{% include "admin/partials/ak_icon.html" with name="moon" %}<span>Mode gelap</span></button>
+            <button type="button" data-ak-theme="auto" aria-pressed="false">{% include "admin/partials/ak_icon.html" with name="system" %}<span>Ikuti sistem</span></button>
+        </div>
+    </details>
+</div>

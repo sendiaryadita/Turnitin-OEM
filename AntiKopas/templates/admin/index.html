@@ -9,7 +9,7 @@
 
 {% block extrastyle %}
 {{ block.super }}
-<link rel="stylesheet" href="{% static 'detector/antikopas_dashboard.css' %}?v=6">
+<link rel="stylesheet" href="{% static 'detector/antikopas_dashboard.css' %}?v=22">
 {% endblock %}
 
 {% block breadcrumbs %}{% endblock %}
@@ -22,40 +22,40 @@
 <div class="ak-dashboard">
 
     <!-- SIDEBAR -->
-    <aside class="ak-sidebar">
+    <aside class="ak-sidebar" id="ak-dashboard-sidebar">
 
         <div>
             <p class="ak-sidebar-heading">MENU UTAMA</p>
 
-            <nav class="ak-navigation">
+            <nav class="ak-navigation" aria-label="Menu administrator">
 
                 <a href="{% url 'admin:index' %}"
-                   class="ak-nav-item active">
-                    <span class="ak-nav-icon">⌂</span>
+                   class="ak-nav-item active" aria-current="page" aria-label="Ringkasan">
+                    <span class="ak-nav-icon">{% include "admin/partials/ak_icon.html" with name="home" %}</span>
                     <span>Ringkasan</span>
                 </a>
 
                 <a href="{% url 'admin:auth_user_changelist' %}"
-                   class="ak-nav-item">
-                    <span class="ak-nav-icon">♙</span>
+                   class="ak-nav-item" aria-label="Pengguna">
+                    <span class="ak-nav-icon">{% include "admin/partials/ak_icon.html" with name="users" %}</span>
                     <span>Pengguna</span>
                 </a>
 
                 <a href="{% url 'admin:detector_document_changelist' %}"
-                   class="ak-nav-item">
-                    <span class="ak-nav-icon">▤</span>
+                   class="ak-nav-item" aria-label="Dokumen">
+                    <span class="ak-nav-icon">{% include "admin/partials/ak_icon.html" with name="document" %}</span>
                     <span>Dokumen</span>
                 </a>
 
                 <a href="{% url 'admin:detector_analysisjob_changelist' %}"
-                   class="ak-nav-item">
-                    <span class="ak-nav-icon">⌕</span>
+                   class="ak-nav-item" aria-label="Analisis">
+                    <span class="ak-nav-icon">{% include "admin/partials/ak_icon.html" with name="search" %}</span>
                     <span>Analisis</span>
                 </a>
 
                 <a href="{% url 'admin:detector_report_changelist' %}"
-                   class="ak-nav-item">
-                    <span class="ak-nav-icon">▥</span>
+                   class="ak-nav-item" aria-label="Laporan">
+                    <span class="ak-nav-icon">{% include "admin/partials/ak_icon.html" with name="chart" %}</span>
                     <span>Laporan</span>
                 </a>
 
@@ -98,7 +98,7 @@
                target="_blank"
                rel="noopener noreferrer"
                class="ak-website-button">
-                ↗ Buka Website
+                {% include "admin/partials/ak_icon.html" with name="external" %} Buka Website
             </a>
 
         </div>
@@ -110,12 +110,12 @@
             <article class="ak-stat-card">
 
                 <div class="ak-stat-icon ak-purple">
-                    ♙
+                    {% include "admin/partials/ak_icon.html" with name="users" %}
                 </div>
 
                 <div>
                     <p>Total Pengguna</p>
-                    <h2>{{ dashboard.total_users }}</h2>
+                    <h2 data-ak-count="{{ dashboard.total_users|unlocalize }}">{{ dashboard.total_users }}</h2>
                     <small>Akun terdaftar</small>
                 </div>
 
@@ -125,12 +125,12 @@
             <article class="ak-stat-card">
 
                 <div class="ak-stat-icon ak-blue">
-                    ⌕
+                    {% include "admin/partials/ak_icon.html" with name="search" %}
                 </div>
 
                 <div>
                     <p>Total Analisis</p>
-                    <h2>{{ dashboard.total_analyses }}</h2>
+                    <h2 data-ak-count="{{ dashboard.total_analyses|unlocalize }}">{{ dashboard.total_analyses }}</h2>
                     <small>Pemeriksaan tercatat</small>
                 </div>
 
@@ -140,12 +140,12 @@
             <article class="ak-stat-card">
 
                 <div class="ak-stat-icon ak-green">
-                    ✓
+                    {% include "admin/partials/ak_icon.html" with name="check" %}
                 </div>
 
                 <div>
                     <p>Analisis Selesai</p>
-                    <h2>{{ dashboard.completed_analyses }}</h2>
+                    <h2 data-ak-count="{{ dashboard.completed_analyses|unlocalize }}">{{ dashboard.completed_analyses }}</h2>
                     <small>Berhasil diproses</small>
                 </div>
 
@@ -155,12 +155,12 @@
             <article class="ak-stat-card">
 
                 <div class="ak-stat-icon ak-red">
-                    ×
+                    {% include "admin/partials/ak_icon.html" with name="close" %}
                 </div>
 
                 <div>
                     <p>Analisis Gagal</p>
-                    <h2>{{ dashboard.failed_analyses }}</h2>
+                    <h2 data-ak-count="{{ dashboard.failed_analyses|unlocalize }}">{{ dashboard.failed_analyses }}</h2>
                     <small>Proses tidak berhasil</small>
                 </div>
 
@@ -210,6 +210,7 @@
                 {% if dashboard.total_analyses == 0 %}
 
                     <div class="ak-empty-chart">
+                        <span class="ak-empty-chart-icon">{% include "admin/partials/ak_icon.html" with name="chart" %}</span>
                         <strong>Belum ada aktivitas</strong>
 
                         <p>
@@ -223,6 +224,7 @@
 
                         <svg class="ak-chart-svg"
                              viewBox="0 0 720 220"
+                             role="img"
                              aria-label="Grafik aktivitas analisis">
 
                             <line x1="10" y1="40"
@@ -247,7 +249,8 @@
 
 
                             {% for item in dashboard.chart %}
-
+                            <g class="ak-chart-day" data-ak-date="{{ item.date|date:'d M Y' }}" data-ak-completed="{{ item.completed|unlocalize }}" data-ak-failed="{{ item.failed|unlocalize }}" style="--ak-bar-index: {{ forloop.counter0 }}">
+                                <rect class="ak-chart-hit" x="{{ item.x|add:'-3' }}" y="30" width="22" height="154" rx="3"/>
                                 <rect
                                     x="{{ item.x }}"
                                     y="{{ item.completed_y|unlocalize }}"
@@ -255,6 +258,7 @@
                                     height="{{ item.completed_height|unlocalize }}"
                                     rx="3"
                                     class="ak-chart-bar-completed">
+                                    <title>{{ item.date|date:"d M Y" }}: {{ item.completed }} analisis selesai</title>
                                 </rect>
 
 
@@ -265,6 +269,7 @@
                                     height="{{ item.failed_height|unlocalize }}"
                                     rx="3"
                                     class="ak-chart-bar-failed">
+                                    <title>{{ item.date|date:"d M Y" }}: {{ item.failed }} analisis gagal</title>
                                 </rect>
 
 
@@ -279,7 +284,7 @@
                                     </text>
 
                                 {% endif %}
-
+                            </g>
                             {% endfor %}
 
 
@@ -316,13 +321,13 @@
                 <div class="ak-system-card">
 
                     <div class="ak-system-symbol">
-                        ▣
+                        {% include "admin/partials/ak_icon.html" with name="storage" %}
                     </div>
 
                     <div>
                         <span>Dokumen tersimpan</span>
 
-                        <strong>
+                        <strong data-ak-count="{{ dashboard.document_size_mb|unlocalize }}" data-ak-decimals="2" data-ak-unit=" MB">
                             {{ dashboard.document_size_mb }} MB
                         </strong>
 
@@ -337,13 +342,13 @@
                 <div class="ak-system-card">
 
                     <div class="ak-system-symbol ak-processing-symbol">
-                        ↻
+                        {% include "admin/partials/ak_icon.html" with name="clock" %}
                     </div>
 
                     <div>
                         <span>Sedang diproses</span>
 
-                        <strong>
+                        <strong data-ak-count="{{ dashboard.processing_analyses|unlocalize }}">
                             {{ dashboard.processing_analyses }}
                         </strong>
 
@@ -358,7 +363,7 @@
                 <div class="ak-retention-box">
 
                     <span class="ak-retention-symbol">
-                        ◷
+                        {% include "admin/partials/ak_icon.html" with name="clock" %}
                     </span>
 
                     <div>
@@ -395,7 +400,7 @@
 
                 <a href="{% url 'admin:detector_analysisjob_changelist' %}"
                    class="ak-view-all">
-                    Lihat Semua →
+                    Lihat Semua {% include "admin/partials/ak_icon.html" with name="arrow" %}
                 </a>
 
             </div>

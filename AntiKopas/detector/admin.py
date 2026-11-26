@@ -67,30 +67,9 @@ class AnalysisJobAdmin(admin.ModelAdmin):
         ordering="status",
     )
     def colored_status(self, obj):
-        colors = {
-            "pending": "#64748B",
-            "processing": "#D97706",
-            "completed": "#15803D",
-            "failed": "#DC2626",
-        }
-
-        color = colors.get(
-            str(obj.status).lower(),
-            "#64748B",
-        )
-
         return format_html(
-            '<span style="'
-            'background-color: {};'
-            'color: white;'
-            'padding: 5px 12px;'
-            'border-radius: 20px;'
-            'font-weight: 600;'
-            'display: inline-block;'
-            '">'
-            '{}'
-            '</span>',
-            color,
+            '<span class="ak-status ak-status-{}">{}</span>',
+            obj.status,
             obj.get_status_display(),
         )
 

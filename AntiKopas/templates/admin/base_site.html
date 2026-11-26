@@ -2,6 +2,11 @@
 {% load static %}
 
 {% block branding %}
+{% if has_permission %}
+<button type="button" class="ak-sidebar-toggle ak-header-action" data-ak-sidebar-toggle aria-label="Lipat navigasi" aria-expanded="true" title="Lipat navigasi">
+    {% include "admin/partials/ak_icon.html" with name="menu" %}
+</button>
+{% endif %}
 <div id="site-name" class="ak-brand">
     <a href="{% url 'admin:index' %}" aria-label="Beranda administrasi AntiKopas">
         <img src="{% static 'detector/antikopas-logo.png' %}"
@@ -15,5 +20,44 @@
 
 {% if user.is_anonymous %}
     {% include "admin/color_theme_toggle.html" %}
+{% endif %}
+{% endblock %}
+
+{% block usertools %}
+{% if has_permission %}
+<div id="user-tools" class="ak-user-tools">
+    <details class="ak-profile-menu" data-ak-dropdown>
+      <summary class="ak-user-identity" title="Menu akun {{ user.get_username }}">
+        <span class="ak-user-avatar" aria-hidden="true">{{ user.get_username|first|upper }}</span>
+        <span class="ak-account-copy">
+            <small>Administrator</small>
+            <strong>{% firstof user.get_short_name user.get_username %}</strong>
+        </span>
+        <span class="ak-profile-chevron">{% include "admin/partials/ak_icon.html" with name="chevron" %}</span>
+      </summary>
+      <div class="ak-profile-panel" data-ak-dropdown-panel>
+        <div class="ak-profile-caption"><strong>{% firstof user.get_short_name user.get_username %}</strong><small>Administrator AntiKopas</small></div>
+        {% if user.has_usable_password %}
+        <a href="{% url 'admin:password_change' %}" class="ak-profile-link">
+            {% include "admin/partials/ak_icon.html" with name="key" %}<span>Ubah sandi</span>
+        </a>
+        {% endif %}
+        <form id="logout-form" method="post" action="{% url 'admin:logout' %}">
+            {% csrf_token %}
+            <button type="submit" class="ak-profile-link">
+                {% include "admin/partials/ak_icon.html" with name="logout" %}<span>Keluar</span>
+            </button>
+        </form>
+      </div>
+    </details>
+    <div class="ak-header-actions">
+        {% if site_url %}
+        <a href="{{ site_url }}" class="ak-header-action" target="_blank" rel="noopener noreferrer" aria-label="Buka website" title="Buka website">
+            {% include "admin/partials/ak_icon.html" with name="external" %}<span class="ak-action-label">Website</span>
+        </a>
+        {% endif %}
+        {% include "admin/color_theme_toggle.html" %}
+    </div>
+</div>
 {% endif %}
 {% endblock %}

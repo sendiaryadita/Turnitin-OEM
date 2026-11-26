@@ -1,0 +1,39 @@
+<svg class="ak-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">
+{% if name == "menu" %}
+<path d="M4 6h16M4 12h16M4 18h16"/>
+{% elif name == "chevron" %}
+<path d="m6 9 6 6 6-6"/>
+{% elif name == "sun" %}
+<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/>
+{% elif name == "moon" %}
+<path d="M20.8 13A9 9 0 0 1 11 3.2 9 9 0 1 0 20.8 13Z"/>
+{% elif name == "system" %}
+<rect x="3" y="3" width="18" height="13" rx="2"/><path d="M8 21h8M12 16v5"/>
+{% elif name == "home" %}
+<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/>
+{% elif name == "users" %}
+<circle cx="9" cy="8" r="3"/><path d="M3 21v-2a6 6 0 0 1 12 0v2M16 5a3 3 0 0 1 0 6M21 21v-2a6 6 0 0 0-3-5"/>
+{% elif name == "document" %}
+<path d="M14 2H5a1 1 0 0 0-1 1v18a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1V8Z"/><path d="M14 2v6h6M8 13h8M8 17h6"/>
+{% elif name == "search" %}
+<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>
+{% elif name == "chart" %}
+<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 16v-3M12 16V8M16 16v-6"/>
+{% elif name == "check" %}
+<path d="m5 12 4 4L19 6"/>
+{% elif name == "close" %}
+<path d="m6 6 12 12M6 18 18 6"/>
+{% elif name == "storage" %}
+<rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M11 6.5h6M11 17.5h6"/>
+{% elif name == "clock" %}
+<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>
+{% elif name == "external" %}
+<path d="M14 3h7v7M21 3l-9 9M10 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-5"/>
+{% elif name == "arrow" %}
+<path d="M4 12h16m-6-6 6 6-6 6"/>
+{% elif name == "key" %}
+<circle cx="8" cy="15" r="5"/><path d="m11.5 11.5 9-9M16 7l3 3M19 4l3 3"/>
+{% elif name == "logout" %}
+<path d="M9 21H4V3h5M9 12h12m-5-5 5 5-5 5"/>
+{% endif %}
+</svg>
