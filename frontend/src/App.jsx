@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { api } from './api/client'
+import AnalysisProgress from './components/AnalysisProgress'
 import logo from './assets/antikopas-logo.png'
 import heroIllustration from './assets/image-transparent.png'
 import heroIllustrationDark from './assets/image-dark-transparent.png'
@@ -64,7 +65,6 @@ function App() {
   const [busy, setBusy] = useState(false)
   const [analysisBusy, setAnalysisBusy] = useState(false)
   const [analysisProgress, setAnalysisProgress] = useState(0)
-  const [analysisStage, setAnalysisStage] = useState('Menunggu proses')
   const [message, setMessage] = useState('')
   const retentionSeconds = Number(stats?.retention_seconds)
   const retentionLabel = retentionSeconds > 0
@@ -135,49 +135,6 @@ function App() {
     if (window.location.pathname !== targetPath) {
       window.history.pushState({ antikopas: true, view }, '', fullTarget)
     }
-  }
-
-  function friendlyAnalysisStage(stage) {
-    const value = String(stage || '').trim()
-    const normalized = value.toLowerCase()
-
-    if (!value) return 'Sedang memproses dokumen'
-    if (normalized.includes('gagal')) return 'Pemeriksaan gagal'
-    if (normalized.includes('selesai')) return 'Pemeriksaan selesai'
-    if (normalized.includes('sitasi')) return 'Memeriksa sitasi'
-    if (normalized.includes('laporan') || normalized.includes('report')) return 'Menyiapkan laporan'
-    if (normalized.includes('cross') || normalized.includes('academic') || normalized.includes('validasi')) {
-      return 'Memvalidasi kecocokan semantik'
-    }
-    if (normalized.includes('full text') || normalized.includes('fulltext') || normalized.includes('pdf jurnal')) {
-      return 'Memeriksa isi sumber akademik'
-    }
-    if (
-      normalized.includes('embedding') ||
-      normalized.includes('bge') ||
-      normalized.includes('membandingkan') ||
-      normalized.includes('semantik')
-    ) {
-      return 'Membandingkan isi dokumen dengan sumber akademik'
-    }
-    if (
-      normalized.includes('openalex') ||
-      normalized.includes('literatur') ||
-      normalized.includes('sumber akademik') ||
-      normalized.includes('mencari sumber')
-    ) {
-      return 'Mencari sumber akademik'
-    }
-    if (
-      normalized.includes('dokumen') ||
-      normalized.includes('membaca') ||
-      normalized.includes('preprocess') ||
-      normalized.includes('persiapan')
-    ) {
-      return 'Membaca dan menyiapkan dokumen'
-    }
-
-    return value
   }
 
   
@@ -542,8 +499,10 @@ function App() {
   const loadAnalyses = useCallback(async () => {
     try {
       const data = await api.listAnalyses({ page: historyMeta.page, query: historyQuery, status: historyStatus })
-      setAnalyses(data.results || [])
-      setHistoryMeta({ page: data.page || 1, totalPages: data.total_pages || 1, count: data.count || 0 })
+      const nextAnalyses = data.results || []
+      setAnalyses((current) => JSON.stringify(current) === JSON.stringify(nextAnalyses) ? current : nextAnalyses)
+      const nextMeta = { page: data.page || 1, totalPages: data.total_pages || 1, count: data.count || 0 }
+      setHistoryMeta((current) => current.page === nextMeta.page && current.totalPages === nextMeta.totalPages && current.count === nextMeta.count ? current : nextMeta)
     } catch (error) {
       setMessage(error.message)
     }
@@ -551,32 +510,10 @@ function App() {
 
   const loadStats = useCallback(async () => {
     try {
-      setStats(await api.getStats())
+      const nextStats = await api.getStats()
+      setStats((current) => JSON.stringify(current) === JSON.stringify(nextStats) ? current : nextStats)
     } catch (error) {
       setMessage(error.message)
-    }
-  }, [])
-
-  const loadActiveProgress = useCallback(async () => {
-    try {
-      const data = await api.listAnalyses({
-        page: 1,
-        pageSize: 10,
-        status: 'processing',
-      })
-
-      const activeJob = (data.results || [])[0]
-      if (!activeJob) return
-
-      const progress = Number(activeJob.progress_percent)
-      if (Number.isFinite(progress)) {
-        setAnalysisProgress(Math.max(0, Math.min(progress, 100)))
-      }
-
-      setAnalysisStage(friendlyAnalysisStage(activeJob.progress_stage))
-    } catch {
-      // Progress hanya informasi tampilan.
-      // Error utama tetap ditangani oleh request analisis.
     }
   }, [])
 
@@ -672,7 +609,6 @@ function App() {
     setBusy(true)
     setAnalysisBusy(false)
     setAnalysisProgress(0)
-    setAnalysisStage('Menunggu proses')
     setMessage('')
     try {
       const data = await api.login(login.username, login.password)
@@ -724,24 +660,13 @@ function App() {
     }
     setAnalysisBusy(true)
     setAnalysisProgress(0)
-    setAnalysisStage('Mengirim dokumen')
     setMessage('Dokumen sedang dianalisis. Proses ini dapat membutuhkan waktu.')
     let completed = false
-
-    const progressRefreshTimer = window.setInterval(() => {
-      loadActiveProgress()
-    }, 1200)
-
-    const statsRefreshTimer = window.setInterval(() => {
-      loadAnalyses()
-      loadStats()
-    }, 1500)
 
     try {
       const data = await api.detect(form.title, form.file)
       completed = true
       setAnalysisProgress(100)
-      setAnalysisStage('Pemeriksaan selesai')
       setResult(data)
       setMessage('Analisis selesai.')
       setForm({ title: '', file: null })
@@ -749,17 +674,13 @@ function App() {
       await loadAnalyses()
       await loadStats()
     } catch (error) {
-      setAnalysisStage('Pemeriksaan gagal')
       setMessage(error.message)
     } finally {
-      window.clearInterval(progressRefreshTimer)
-      window.clearInterval(statsRefreshTimer)
       setAnalysisBusy(false)
 
       if (completed) {
         window.setTimeout(() => {
           setAnalysisProgress(0)
-          setAnalysisStage('Menunggu proses')
         }, 900)
       } else {
         setAnalysisProgress(0)
@@ -1016,7 +937,7 @@ function App() {
   }
 
   return (
-    <main className="dashboard-reference">
+    <main className={`dashboard-reference${analysisBusy ? ' is-analyzing' : ''}`}>
       <div className="dashboard-ambient-orb dashboard-orb-orange" aria-hidden="true" />
       <div className="dashboard-ambient-orb dashboard-orb-blue" aria-hidden="true" />
       <nav className="dashboard-reference-nav">
@@ -1115,7 +1036,7 @@ function App() {
               )}
             </div>
             <button className="dashboard-reference-submit" disabled={analysisBusy}>{analysisBusy ? 'Menganalisis...' : <>Mulai analisis <LineIcon type="search" /></>}</button>
-            {(analysisBusy || analysisProgress > 0) && <div className="analysis-loading" role="status" aria-live="polite"><div className="loading-heading"><span className="loading-spinner"></span><strong>{analysisProgress === 100 ? 'Analisis selesai' : 'Sedang menganalisis dokumen'}</strong><b className="loading-percentage">{analysisProgress}%</b></div><p>{analysisStage}</p><div className="loading-track"><i style={{ width: `${analysisProgress}%` }}></i></div><small>{analysisProgress === 100 ? 'Analisis berhasil diselesaikan.' : 'Progress mengikuti tahapan pemeriksaan yang sedang dikerjakan.'}</small></div>}
+            {(analysisBusy || analysisProgress > 0) && <AnalysisProgress active={analysisBusy} completed={analysisProgress === 100} />}
             {message && <p className="notice">{message}</p>}
           </form>
 
