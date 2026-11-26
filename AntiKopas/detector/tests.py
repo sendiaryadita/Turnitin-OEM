@@ -14,6 +14,15 @@ from docx import Document as WordDocument
 
 
 class BackendApiTests(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        temporary = TemporaryDirectory()
+        cls.addClassCleanup(temporary.cleanup)
+        media_settings = override_settings(MEDIA_ROOT=temporary.name)
+        media_settings.enable()
+        cls.addClassCleanup(media_settings.disable)
+
     def setUp(self):
         self.client = Client()
         self.user = User.objects.create_user(
