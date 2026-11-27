@@ -3,8 +3,10 @@ from django.urls import path, include
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from detector.views import download_media
 
-# Arahkan tombol View Site ke frontend React AntiKopas.
-admin.site.site_url = "http://localhost:5173/"
+import os
+
+# Arahkan tombol View Site secara dinamis ke root frontend host ('/'), atau ikuti env FRONTEND_URL.
+admin.site.site_url = os.getenv("FRONTEND_URL", "/")
 
 urlpatterns = [
     path("admin/", admin.site.urls),
