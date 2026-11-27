@@ -1,93 +1,105 @@
-/* AntiKopas V22: navy, coral, warm light canvas and deep-indigo dark canvas.
-   Derived from frontend/src/App.css; shared by all Django Admin pages. */
+/* AntiKopas V23: Selaras 100% dengan Frontend (Midnight Navy #1e1b4b, Coral #f06b55, Warm Paper #f7f4ee, Deep Indigo #080f35).
+   Enhanced with Apple HIG, Emil Micro-interactions, and High Contrast WCAG AAA compliance. */
+
+:root {
+  --font-family-primary: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --ak-duration: 220ms;
+  --ak-ease: cubic-bezier(.16, 1, .3, 1);
+}
+
 :root,
 html[data-theme="light"] {
-  --ak-bg: #faf8f5;
+  --ak-bg: #f7f4ee;
   --ak-card: #ffffff;
-  --ak-card-muted: #f1eef6;
-  --ak-border: #e5e1dc;
+  --ak-card-muted: #f3eee7;
+  --ak-border: #e8e2dc;
   --ak-text: #1e1b4b;
-  --ak-muted: #606a82;
+  --ak-muted: #64748b;
   --ak-primary: #1e1b4b;
-  --ak-primary-hover: #302952;
+  --ak-primary-hover: #2b2763;
   --ak-primary-soft: #eeecf8;
-  --ak-primary-text: #40377b;
+  --ak-primary-text: #1e1b4b;
   --ak-primary-fg: #ffffff;
-  --ak-accent: #b84c39;
+  --ak-brand: #f06b55;
+  --ak-accent: #f06b55;
+  --ak-accent-hover: #e75d4b;
   --ak-accent-soft: #fff1ed;
-  --ak-success: #17714d;
-  --ak-success-soft: #e9f6ef;
-  --ak-danger: #b33449;
-  --ak-danger-soft: #ffedf1;
-  --ak-warning: #855514;
-  --ak-warning-soft: #fff3dc;
-  --ak-shadow: 0 6px 22px rgba(28, 32, 59, .045);
-  --ak-shadow-hover: 0 12px 28px rgba(28, 32, 59, .085);
+  --ak-success: #16a34a;
+  --ak-success-soft: #eafaf1;
+  --ak-danger: #e11d48;
+  --ak-danger-soft: #ffeef2;
+  --ak-warning: #d97706;
+  --ak-warning-soft: #fffbeb;
+  --ak-shadow: 0 4px 20px rgba(30, 27, 75, .05);
+  --ak-shadow-hover: 0 10px 30px rgba(30, 27, 75, .09);
   color-scheme: light;
 }
 
 html[data-theme="dark"]:not([data-ak-color-scheme]),
 html[data-ak-color-scheme="dark"] {
-  --ak-bg: #060920;
-  --ak-card: #12102c;
-  --ak-card-muted: #201d3b;
-  --ak-border: #38334f;
-  --ak-text: #f8f7ff;
-  --ak-muted: #b7b5cf;
+  --ak-bg: #080f35;
+  --ak-card: #111847;
+  --ak-card-muted: #1c245c;
+  --ak-border: #283375;
+  --ak-text: #f8fafc;
+  --ak-muted: #94a3b8;
   --ak-primary: #f06b55;
-  --ak-primary-hover: #ff947c;
-  --ak-primary-soft: #352139;
-  --ak-primary-text: #ffb29e;
-  --ak-primary-fg: #211322;
-  --ak-accent: #ff947c;
-  --ak-accent-soft: #3d2929;
-  --ak-success: #79d8ad;
-  --ak-success-soft: #1c3832;
-  --ak-danger: #ff9aac;
-  --ak-danger-soft: #422735;
-  --ak-warning: #efc37e;
-  --ak-warning-soft: #3b3227;
-  --ak-shadow: 0 6px 22px rgba(3, 5, 15, .15);
-  --ak-shadow-hover: 0 12px 28px rgba(3, 5, 15, .24);
+  --ak-primary-hover: #ff7c68;
+  --ak-primary-soft: #2a1b38;
+  --ak-primary-text: #ffb8aa;
+  --ak-primary-fg: #ffffff;
+  --ak-brand: #f06b55;
+  --ak-accent: #f06b55;
+  --ak-accent-hover: #ff7c68;
+  --ak-accent-soft: #381f26;
+  --ak-success: #4ade80;
+  --ak-success-soft: #123324;
+  --ak-danger: #fb7185;
+  --ak-danger-soft: #3b1823;
+  --ak-warning: #fbbf24;
+  --ak-warning-soft: #382813;
+  --ak-shadow: 0 4px 24px rgba(0, 0, 0, .4);
+  --ak-shadow-hover: 0 12px 36px rgba(0, 0, 0, .6);
   color-scheme: dark;
 }
 
 @media (prefers-color-scheme: dark) {
   html[data-theme="auto"]:not([data-ak-color-scheme]),
   html:not([data-theme]):not([data-ak-color-scheme]) {
-    --ak-bg: #060920;
-    --ak-card: #12102c;
-    --ak-card-muted: #201d3b;
-    --ak-border: #38334f;
-    --ak-text: #f8f7ff;
-    --ak-muted: #b7b5cf;
+    --ak-bg: #080f35;
+    --ak-card: #111847;
+    --ak-card-muted: #1c245c;
+    --ak-border: #283375;
+    --ak-text: #f8fafc;
+    --ak-muted: #94a3b8;
     --ak-primary: #f06b55;
-    --ak-primary-hover: #ff947c;
-    --ak-primary-soft: #352139;
-    --ak-primary-text: #ffb29e;
-    --ak-primary-fg: #211322;
-    --ak-accent: #ff947c;
-    --ak-accent-soft: #3d2929;
-    --ak-success: #79d8ad;
-    --ak-success-soft: #1c3832;
-    --ak-danger: #ff9aac;
-    --ak-danger-soft: #422735;
-    --ak-warning: #efc37e;
-    --ak-warning-soft: #3b3227;
-    --ak-shadow: 0 6px 22px rgba(3, 5, 15, .15);
-    --ak-shadow-hover: 0 12px 28px rgba(3, 5, 15, .24);
+    --ak-primary-hover: #ff7c68;
+    --ak-primary-soft: #2a1b38;
+    --ak-primary-text: #ffb8aa;
+    --ak-primary-fg: #ffffff;
+    --ak-brand: #f06b55;
+    --ak-accent: #f06b55;
+    --ak-accent-hover: #ff7c68;
+    --ak-accent-soft: #381f26;
+    --ak-success: #4ade80;
+    --ak-success-soft: #123324;
+    --ak-danger: #fb7185;
+    --ak-danger-soft: #3b1823;
+    --ak-warning: #fbbf24;
+    --ak-warning-soft: #382813;
+    --ak-shadow: 0 4px 24px rgba(0, 0, 0, .4);
+    --ak-shadow-hover: 0 12px 36px rgba(0, 0, 0, .6);
     color-scheme: dark;
   }
 }
 
-/* Map Django's built-in components to the same palette as the dashboard. */
+/* Map Django's built-in components to AntiKopas signature palette */
 :root,
 html[data-theme] {
-  --ak-brand: #f06b55;
-  --primary: var(--ak-primary);
+  --primary: var(--ak-brand);
   --secondary: var(--ak-primary);
   --accent: var(--ak-accent);
-  --primary-fg: var(--ak-primary-fg);
+  --primary-fg: #ffffff;
   --body-bg: var(--ak-bg);
   --body-fg: var(--ak-text);
   --body-quiet-color: var(--ak-muted);
@@ -96,31 +108,31 @@ html[data-theme] {
   --header-bg: var(--ak-card);
   --header-color: var(--ak-text);
   --header-link-color: var(--ak-text);
-  --header-branding-color: var(--ak-accent);
+  --header-branding-color: var(--ak-brand);
   --breadcrumbs-bg: var(--ak-card);
   --breadcrumbs-fg: var(--ak-muted);
-  --breadcrumbs-link-fg: var(--ak-primary-text);
-  --link-fg: var(--ak-primary-text);
-  --link-hover-color: var(--ak-accent);
-  --link-selected-fg: var(--ak-primary-text);
+  --breadcrumbs-link-fg: var(--ak-brand);
+  --link-fg: var(--ak-brand);
+  --link-hover-color: var(--ak-accent-hover);
+  --link-selected-fg: var(--ak-brand);
   --hairline-color: var(--ak-border);
   --border-color: var(--ak-border);
   --darkened-bg: var(--ak-card-muted);
-  --selected-bg: var(--ak-primary-soft);
-  --selected-row: var(--ak-primary-soft);
+  --selected-bg: var(--ak-accent-soft);
+  --selected-row: var(--ak-accent-soft);
   --error-fg: var(--ak-danger);
-  --button-fg: var(--ak-primary-fg);
-  --button-bg: var(--ak-primary);
-  --button-hover-bg: var(--ak-primary-hover);
-  --default-button-bg: var(--ak-primary);
-  --default-button-hover-bg: var(--ak-primary-hover);
+  --button-fg: #ffffff;
+  --button-bg: var(--ak-brand);
+  --button-hover-bg: var(--ak-accent-hover);
+  --default-button-bg: var(--ak-brand);
+  --default-button-hover-bg: var(--ak-accent-hover);
   --close-button-bg: var(--ak-muted);
   --close-button-hover-bg: var(--ak-text);
   --delete-button-bg: var(--ak-danger);
   --delete-button-hover-bg: var(--ak-danger);
-  --object-tools-fg: var(--ak-primary-fg);
-  --object-tools-bg: var(--ak-primary);
-  --object-tools-hover-bg: var(--ak-primary-hover);
+  --object-tools-fg: #ffffff;
+  --object-tools-bg: var(--ak-brand);
+  --object-tools-hover-bg: var(--ak-accent-hover);
   --message-debug-bg: var(--ak-card-muted);
   --message-info-bg: var(--ak-primary-soft);
   --message-success-bg: var(--ak-success-soft);
@@ -128,11 +140,19 @@ html[data-theme] {
   --message-error-bg: var(--ak-danger-soft);
 }
 
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   background: var(--ak-bg);
   color: var(--ak-text);
   font-family: var(--font-family-primary);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  margin: 0;
+  overflow-x: hidden;
 }
 
 .ak-icon {
@@ -142,24 +162,26 @@ body {
   flex: 0 0 auto;
 }
 
+/* HEADER WITH FRONTEND ALIGNMENT */
 #container > #header {
   box-sizing: border-box;
   display: flex;
   flex: 0 0 auto;
   flex-direction: row;
-  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 16px 24px;
-  min-height: 76px;
-  padding: 16px 28px;
+  min-height: 74px;
+  padding: 14px 28px;
   border-bottom: 1px solid var(--ak-border);
   background: var(--ak-card);
   color: var(--ak-text);
+  position: relative;
+  z-index: 40;
 }
 
 #header #site-name.ak-brand { margin: 0; padding: 0; line-height: 1; }
-#header #branding { align-items: center; gap: 12px; min-width: 0; }
+#header #branding { display: flex; align-items: center; gap: 12px; min-width: 0; }
 #header .ak-brand a {
   display: inline-flex;
   align-items: center;
@@ -167,59 +189,63 @@ body {
   color: var(--ak-text);
   text-decoration: none;
 }
+
 .ak-brand-logo {
   display: block;
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   padding: 2px;
   box-sizing: border-box;
   border: 1px solid var(--ak-border);
-  border-radius: 11px;
+  border-radius: 12px;
   background: #ffffff;
   object-fit: contain;
-  transition: transform .18s ease;
+  transition: transform .2s var(--ak-ease);
 }
+
 #header .ak-brand-name {
   display: inline-flex;
-  font-size: 23px;
-  font-weight: 750;
-  letter-spacing: -.8px;
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: -.03em;
 }
 #header .ak-brand-anti { color: var(--ak-text); }
 #header .ak-brand-kopas { color: var(--ak-brand); }
 #header .ak-brand-role {
-  padding-left: 14px;
+  padding-left: 12px;
   border-left: 1px solid var(--ak-border);
   color: var(--ak-muted);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .02em;
 }
+
 #header #user-tools.ak-user-tools {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 18px;
+  gap: 14px;
   margin: 0;
   padding: 0;
   color: var(--ak-text);
   font-size: 12px;
-  text-transform: none;
-  letter-spacing: normal;
 }
-.ak-user-identity { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.ak-user-identity { display: flex; align-items: center; gap: 10px; min-width: 0; cursor: pointer; }
 .ak-user-avatar {
   display: grid;
   width: 36px;
   height: 36px;
   place-items: center;
   border-radius: 50%;
-  color: var(--ak-primary-text);
-  background: var(--ak-primary-soft);
-  font-size: 14px;
-  font-weight: 700;
+  color: #ffffff;
+  background: var(--ak-brand);
+  font-size: 13px;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(240, 107, 85, .3);
 }
-.ak-account-copy { display: grid; gap: 2px; line-height: 1.3; }
-.ak-account-copy small { color: var(--ak-muted); font-size: 10px; }
+
+.ak-account-copy { display: grid; gap: 2px; line-height: 1.25; }
+.ak-account-copy small { color: var(--ak-muted); font-size: 10px; font-weight: 500; }
 .ak-account-copy strong {
   max-width: 140px;
   overflow: hidden;
@@ -227,9 +253,10 @@ body {
   white-space: nowrap;
   color: var(--ak-text);
   font-size: 13px;
-  font-weight: 650;
+  font-weight: 700;
 }
-.ak-header-actions { display: flex; align-items: center; gap: 6px; }
+
+.ak-header-actions { display: flex; align-items: center; gap: 8px; }
 #header .ak-header-action,
 #header #logout-form button,
 #header .theme-toggle {
@@ -238,64 +265,81 @@ body {
   justify-content: center;
   gap: 7px;
   box-sizing: border-box;
-  min-width: 36px;
-  min-height: 36px;
+  min-width: 38px;
+  min-height: 38px;
   margin: 0;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: 9px;
-  color: var(--ak-muted);
-  background: transparent;
+  padding: 8px 12px;
+  border: 1px solid var(--ak-border);
+  border-radius: 11px;
+  color: var(--ak-text);
+  background: var(--ak-card);
   font: inherit;
   font-size: 12px;
+  font-weight: 600;
   text-decoration: none;
-  text-transform: none;
-  letter-spacing: normal;
-  transition: background-color .16s ease, color .16s ease, border-color .16s ease;
+  cursor: pointer;
+  transition: all .18s var(--ak-ease);
 }
-#header .ak-header-action .ak-icon,
-#header #logout-form .ak-icon { width: 16px; height: 16px; }
-#header #logout-form { display: inline-flex; margin: 0; }
+
 #header .ak-header-action:hover,
 #header #logout-form button:hover,
 #header .theme-toggle:hover {
-  border-color: var(--ak-border);
+  border-color: var(--ak-brand);
   background: var(--ak-card-muted);
-  color: var(--ak-text);
+  color: var(--ak-brand);
+  transform: translateY(-1px);
 }
-#header .theme-toggle { border-color: var(--ak-border); padding: 8px; color: var(--ak-primary-text); }
+
+#header .theme-toggle { padding: 8px; color: var(--ak-brand); }
 #header .theme-toggle svg { width: 18px; height: 18px; }
 
+/* CONTENT & SIDEBAR REFINEMENT */
 #content { min-width: 0; }
-#content h1 { color: var(--ak-text); font-weight: 700; letter-spacing: -.035em; }
-#content h2 { color: var(--ak-text); }
+#content h1 { color: var(--ak-text); font-weight: 800; letter-spacing: -.03em; }
+#content h2 { color: var(--ak-text); font-weight: 700; }
 #nav-sidebar { background: var(--ak-card); border-right-color: var(--ak-border); }
 #nav-sidebar #nav-filter {
-  box-sizing: border-box; width: calc(100% - 24px); min-height: 36px;
-  margin: 16px 12px 4px; padding: 8px 10px; border-radius: 8px; font-size: 12px;
+  box-sizing: border-box; width: calc(100% - 24px); min-height: 38px;
+  margin: 16px 12px 6px; padding: 8px 12px; border-radius: 10px; font-size: 12px;
+  border: 1px solid var(--ak-border); background: var(--ak-card-muted); color: var(--ak-text);
+}
+#nav-sidebar #nav-filter:focus {
+  outline: 2px solid var(--ak-brand);
+  border-color: var(--ak-brand);
 }
 #nav-sidebar #nav-filter::placeholder { color: var(--ak-muted); opacity: 1; }
-#nav-sidebar .module { margin: 12px; border-radius: 10px; overflow: hidden; }
+#nav-sidebar .module { margin: 12px; border-radius: 14px; overflow: hidden; border: 1px solid var(--ak-border); }
 #nav-sidebar .module th { background: var(--ak-card); }
-#nav-sidebar .module a { font-weight: 550; }
-#nav-sidebar .current-model { background: var(--ak-primary-soft); box-shadow: inset 3px 0 var(--ak-primary); }
+#nav-sidebar .module a { font-weight: 600; color: var(--ak-text); }
+#nav-sidebar .current-model { background: var(--ak-accent-soft); box-shadow: inset 4px 0 var(--ak-brand); }
 #nav-sidebar .current-model th { background: transparent; }
-#nav-sidebar .current-model a { color: var(--ak-primary-text); font-weight: 700; }
+#nav-sidebar .current-model a { color: var(--ak-brand); font-weight: 800; }
 #nav-sidebar .addlink { display: none; }
+
 .module h2, .module caption, #changelist-filter h2 {
   background: var(--ak-card-muted);
   color: var(--ak-text);
-  font-weight: 650;
+  font-weight: 700;
 }
 .module caption a.section, .module h2 a,
 #nav-sidebar .current-app .section:link,
 #nav-sidebar .current-app .section:visited { color: var(--ak-text); }
+
 ol.breadcrumbs, div.breadcrumbs {
   background: var(--ak-card);
   color: var(--ak-muted);
   border-bottom: 1px solid var(--ak-border);
   font-size: 13px;
+  font-weight: 500;
+  padding: 12px 28px;
 }
+ol.breadcrumbs a, div.breadcrumbs a {
+  color: var(--ak-brand);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+/* DATA TABLES & FORMS (WCAG AAA HIGH CONTRAST) */
 #changelist .results,
 #changelist-filter,
 #toolbar,
@@ -303,66 +347,122 @@ fieldset.module,
 .inline-group,
 .submit-row {
   border: 1px solid var(--ak-border);
-  border-radius: 12px;
+  border-radius: 16px;
   background: var(--ak-card);
+  box-shadow: var(--ak-shadow);
 }
-#changelist .results { overflow: auto; }
+
+#changelist .results { overflow: auto; border-radius: 16px; }
+#changelist #result_list { width: 100%; border-collapse: collapse; }
 #changelist #result_list thead th,
 #changelist #result_list thead th a,
 #changelist #result_list thead th span {
   background: var(--ak-card-muted);
   color: var(--ak-text);
-  font-size: 12px;
-  font-weight: 650;
+  font-size: 11px;
+  font-weight: 750;
+  text-transform: uppercase;
+  letter-spacing: .05em;
+  padding: 13px 16px;
 }
-#result_list tbody tr { background: var(--ak-card); }
-#result_list tbody tr:nth-child(even) { background: var(--ak-bg); }
-#result_list tbody tr:hover { background: var(--ak-primary-soft); }
-#result_list th, #result_list td { padding-top: 13px; padding-bottom: 13px; border-color: var(--ak-border); }
-#changelist-filter a, #changelist-filter h3 { color: var(--ak-muted); font-size: 13px; }
-#changelist-filter li.selected a { color: var(--ak-primary-text); font-weight: 650; }
-#changelist .actions, #changelist .paginator { background: var(--ak-card); color: var(--ak-muted); }
-#toolbar form #searchbar { min-height: 34px; box-sizing: border-box; padding: 7px 10px; }
-#toolbar form input[type="submit"], #changelist .actions .button {
-  min-height: 34px;
-  padding: 7px 12px;
+
+#result_list tbody tr { background: var(--ak-card); transition: background-color .15s ease; }
+#result_list tbody tr:nth-child(even) { background: var(--ak-card-muted); }
+#result_list tbody tr:hover { background: var(--ak-accent-soft); }
+#result_list tbody tr.selected { background: var(--ak-accent-soft) !important; font-weight: 600; }
+#result_list th, #result_list td { padding: 14px 16px; border-color: var(--ak-border); color: var(--ak-text); vertical-align: middle; }
+#result_list td a { color: var(--ak-brand); font-weight: 650; text-decoration: none; }
+#result_list td a:hover { text-decoration: underline; color: var(--ak-accent-hover); }
+
+#changelist-filter a, #changelist-filter h3 { color: var(--ak-text); font-size: 13px; }
+#changelist-filter li.selected a { color: var(--ak-brand); font-weight: 750; }
+#changelist .actions, #changelist .paginator { background: var(--ak-card); color: var(--ak-muted); padding: 12px 18px; border-radius: 12px; }
+
+#toolbar form #searchbar {
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 8px 14px;
+  border-radius: 10px;
   border: 1px solid var(--ak-border);
-  border-radius: 7px;
-  background: var(--ak-card-muted);
-  color: var(--ak-text);
-  font-size: 12px;
-}
-input[type="text"], input[type="password"], input[type="email"], input[type="url"],
-input[type="number"], input[type="search"], select, textarea {
-  border-radius: 8px;
   background: var(--ak-card);
   color: var(--ak-text);
-  border-color: var(--ak-border);
+  font-size: 13px;
 }
+#toolbar form #searchbar:focus {
+  outline: 2px solid var(--ak-brand);
+  border-color: var(--ak-brand);
+}
+
+#toolbar form input[type="submit"], #changelist .actions .button {
+  min-height: 38px;
+  padding: 8px 16px;
+  border: 1px solid var(--ak-brand);
+  border-radius: 10px;
+  background: var(--ak-brand);
+  color: #ffffff !important;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .18s var(--ak-ease);
+}
+#toolbar form input[type="submit"]:hover, #changelist .actions .button:hover {
+  background: var(--ak-accent-hover);
+  border-color: var(--ak-accent-hover);
+  transform: translateY(-1px);
+}
+
+/* FORM CONTROLS (HIGH CONTRAST NO COLLISION) */
+input[type="text"], input[type="password"], input[type="email"], input[type="url"],
+input[type="number"], input[type="search"], select, textarea {
+  border-radius: 10px;
+  background: var(--ak-card);
+  color: var(--ak-text);
+  border: 1px solid var(--ak-border);
+  padding: 10px 14px;
+  font-size: 13px;
+  transition: border-color .16s ease, box-shadow .16s ease;
+}
+input[type="text"]:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--ak-brand);
+  border-color: var(--ak-brand);
+  box-shadow: 0 0 0 3px rgba(240, 107, 85, .2);
+}
+
 input[type="submit"], input[type="button"], .button, .submit-row a.deletelink {
-  border-radius: 8px;
-  transition: background-color .16s ease, transform .16s ease;
+  border-radius: 10px;
+  font-weight: 700;
+  transition: background-color .18s ease, transform .18s ease, box-shadow .18s ease;
+  cursor: pointer;
 }
+
 #content .object-tools a {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  min-height: 34px;
+  gap: 8px;
+  min-height: 38px;
   box-sizing: border-box;
-  border-radius: 8px;
-  padding: 8px 12px;
-  background: var(--ak-primary);
-  color: var(--ak-primary-fg);
+  border-radius: 11px;
+  padding: 9px 16px;
+  background: var(--ak-brand);
+  color: #ffffff !important;
   font-size: 12px;
-  font-weight: 650;
+  font-weight: 750;
   letter-spacing: normal;
   text-transform: none;
+  box-shadow: 0 4px 14px rgba(240, 107, 85, .25);
+  transition: all .18s var(--ak-ease);
 }
-#content .object-tools a:hover { background: var(--ak-primary-hover); }
+#content .object-tools a:hover {
+  background: var(--ak-accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(240, 107, 85, .35);
+}
 #content .object-tools a.addlink { background-image: none; }
-#content .object-tools a.addlink::before { content: "+"; font-size: 18px; line-height: 12px; }
-.messagelist li { color: var(--ak-text); border-radius: 9px; }
+#content .object-tools a.addlink::before { content: "+"; font-size: 17px; line-height: 12px; font-weight: 800; }
 
+.messagelist li { color: var(--ak-text); border-radius: 12px; font-weight: 600; padding: 12px 18px; }
+
+/* EMPTY STATES & BADGES */
 .ak-admin-empty {
   display: grid;
   place-items: center;
@@ -372,195 +472,98 @@ input[type="submit"], input[type="button"], .button, .submit-row a.deletelink {
   margin: 18px 0;
   padding: 28px 20px;
   border: 1px dashed var(--ak-border);
-  border-radius: 14px;
+  border-radius: 18px;
   background: var(--ak-card);
   text-align: center;
 }
 .ak-admin-empty-icon {
   display: grid; width: 58px; height: 58px; place-items: center;
-  border-radius: 16px; color: var(--ak-primary-text); background: var(--ak-primary-soft);
+  border-radius: 16px; color: var(--ak-brand); background: var(--ak-accent-soft);
 }
-.ak-admin-empty h3 { margin: 0; color: var(--ak-text); font-size: 17px; }
+.ak-admin-empty h3 { margin: 0; color: var(--ak-text); font-size: 17px; font-weight: 750; }
 .ak-admin-empty p { max-width: 360px; margin: 0; color: var(--ak-muted); line-height: 1.6; }
 
 .ak-status, .ak-badge {
   display: inline-flex; align-items: center; gap: 6px;
-  padding: 5px 10px; border-radius: 999px;
+  padding: 5px 11px; border-radius: 9999px;
   color: var(--ak-muted); background: var(--ak-card-muted);
-  font-size: 11px; font-weight: 650; line-height: 1.5; white-space: nowrap;
+  font-size: 11px; font-weight: 750; line-height: 1.5; white-space: nowrap;
+  border: 1px solid currentColor;
 }
-.ak-status::before, .ak-badge::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: currentColor; }
-.ak-status-completed, .ak-badge-success { color: var(--ak-success); background: var(--ak-success-soft); }
-.ak-status-failed, .ak-badge-danger { color: var(--ak-danger); background: var(--ak-danger-soft); }
-.ak-status-processing, .ak-badge-warning { color: var(--ak-warning); background: var(--ak-warning-soft); }
+.ak-status::before, .ak-badge::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.ak-status-completed, .ak-badge-success { color: var(--ak-success) !important; background: var(--ak-success-soft); border-color: rgba(22, 163, 74, .25); }
+.ak-status-failed, .ak-badge-danger { color: var(--ak-danger) !important; background: var(--ak-danger-soft); border-color: rgba(225, 29, 72, .25); }
+.ak-status-processing, .ak-badge-warning { color: var(--ak-warning) !important; background: var(--ak-warning-soft); border-color: rgba(217, 119, 6, .25); }
 
-:where(a, button, input, select, textarea):focus-visible {
-  outline: 3px solid var(--ak-primary);
-  outline-offset: 3px;
-}
-body.login { background: var(--ak-bg); }
-.login #container { background: var(--ak-card); border: 1px solid var(--ak-border); border-radius: 16px; box-shadow: var(--ak-shadow); }
-.login #container > #header { padding: 20px; justify-content: center; }
-.login #header .ak-brand-role { display: none; }
-
-@media (max-width: 1000px) {
+/* MOBILE RESPONSIVE ENGINE (PHONE PERFECTION) */
+@media (max-width: 900px) {
   #header .ak-brand-role { display: none; }
+  ol.breadcrumbs, div.breadcrumbs { padding: 10px 18px; font-size: 12px; }
 }
-@media (max-width: 760px) {
-  #container > #header { flex-direction: column; flex-wrap: nowrap; align-items: stretch; gap: 14px; padding: 16px 20px; }
-  #header #user-tools.ak-user-tools { width: 100%; float: none; justify-content: space-between; gap: 10px; }
+
+@media (max-width: 768px) {
+  #container > #header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    min-height: 64px;
+  }
+  #header .ak-brand-logo { width: 34px; height: 34px; }
+  #header .ak-brand-name { font-size: 19px; }
   #header .ak-action-label { display: none; }
-  #header .ak-header-action, #header #logout-form button { padding: 9px; }
-  .ak-account-copy strong { max-width: 110px; }
+  #header .ak-header-action, #header #logout-form button, #header .theme-toggle {
+    min-width: 38px; min-height: 38px; padding: 8px;
+  }
+  .ak-account-copy strong { max-width: 90px; }
+  #toolbar form #searchbar { width: 100%; margin-bottom: 8px; }
+  #toolbar form { display: flex; flex-direction: column; gap: 8px; }
+  #changelist .actions { flex-direction: column; align-items: stretch; gap: 8px; }
+  #content { padding: 16px 12px !important; }
 }
-@media (max-width: 380px) {
-  #container > #header { padding: 14px 16px; }
-  .ak-user-avatar { width: 32px; height: 32px; }
-  .ak-account-copy strong { max-width: 70px; }
-  .ak-account-copy small { font-size: 9px; }
-  .ak-user-identity { gap: 7px; }
-  .ak-header-actions { gap: 3px; }
-  #header .ak-header-action, #header #logout-form button, #header .theme-toggle { min-width: 32px; padding: 7px; }
-}
-@media (hover: hover) and (pointer: fine) {
-  #header .ak-brand a:hover .ak-brand-logo { transform: rotate(-3deg); }
-}
-@media (prefers-reduced-motion: reduce) {
-  .ak-brand-logo, #header .ak-header-action, #header #logout-form button,
-  #header .theme-toggle, input[type="submit"], input[type="button"], .button {
-    transition: none;
+
+@media (max-width: 480px) {
+  #header #user-tools.ak-user-tools { gap: 6px; }
+  .ak-user-avatar { width: 32px; height: 32px; font-size: 12px; }
+  .ak-account-copy { display: none; }
+  #header .ak-header-actions { gap: 4px; }
+  #header .ak-header-action, #header #logout-form button, #header .theme-toggle {
+    min-width: 34px; min-height: 34px; padding: 6px;
   }
 }
 
-/* V22 interactions: bounded motion, native controls, no animation framework. */
-:root { --ak-duration: 220ms; --ak-ease: cubic-bezier(.2,.7,.2,1); }
-/* Switch the complete palette atomically; fade one page snapshot, not each
-   surface independently of its text. This also covers native admin widgets. */
+/* THEME TRANSITION PROTECTION */
 html.ak-theme-changing,
 html.ak-theme-changing *,
 html.ak-theme-changing *::before,
 html.ak-theme-changing *::after { transition: none !important; }
 ::view-transition { pointer-events: none; }
-::view-transition-group(root) { animation: none; }
-::view-transition-old(root) { animation: none; mix-blend-mode: normal; }
-::view-transition-new(root) { animation: ak-theme-enter 180ms ease-out both; mix-blend-mode: normal; }
+::view-transition-new(root) { animation: ak-theme-enter 180ms ease-out both; }
 @keyframes ak-theme-enter { from { opacity: 0; } to { opacity: 1; } }
-#content-start { animation: ak-page-enter 300ms var(--ak-ease) both; }
-body, #header, #nav-sidebar, .ak-sidebar, .ak-panel, .ak-stat-card,
-#toolbar, #changelist-filter, fieldset.module, .ak-admin-empty,
-.ak-table th, .ak-table td, .ak-profile-panel, .ak-theme-options {
-  transition: background-color var(--ak-duration) ease, color var(--ak-duration) ease,
-    border-color var(--ak-duration) ease, box-shadow 180ms ease, transform 180ms var(--ak-ease);
-}
-#header { position: relative; z-index: 40; }
+
+/* SIDEBAR ENHANCED CONTROLS */
 #header .ak-sidebar-toggle { display: none; }
-.ak-sidebar-enhanced #header .ak-sidebar-toggle { display: inline-flex; flex: 0 0 36px; }
+.ak-sidebar-enhanced #header .ak-sidebar-toggle { display: inline-flex; flex: 0 0 38px; }
 .ak-sidebar-toggle .ak-icon { width: 19px; height: 19px; }
-#header .ak-header-action:active, #header .theme-toggle:active,
-#content .object-tools a:active, .button:active, input[type="submit"]:active { transform: translateY(1px) scale(.98); }
-
-.ak-profile-menu, .ak-theme-menu { position: relative; }
-.ak-profile-menu > summary, .ak-theme-menu > summary { list-style: none; cursor: pointer; }
-.ak-profile-menu > summary::-webkit-details-marker, .ak-theme-menu > summary::-webkit-details-marker { display: none; }
-.ak-profile-menu > summary { border-radius: 10px; padding: 3px 5px; margin: -3px -5px; transition: background-color 160ms ease; }
-.ak-profile-menu > summary:hover { background: var(--ak-card-muted); }
-.ak-profile-chevron .ak-icon { width: 13px; height: 13px; color: var(--ak-muted); transition: transform 180ms ease; }
-.ak-profile-menu[open] .ak-profile-chevron .ak-icon, .ak-theme-menu[open] summary .ak-icon { transform: rotate(180deg); }
-.ak-profile-panel, .ak-theme-options {
-  position: absolute; top: calc(100% + 12px); right: 0; z-index: 50;
-  box-sizing: border-box; width: 230px; max-width: calc(100vw - 32px); padding: 8px;
-  border: 1px solid var(--ak-border); border-radius: 12px;
-  color: var(--ak-text); background: var(--ak-card); box-shadow: var(--ak-shadow-hover);
-  animation: ak-menu-enter 170ms var(--ak-ease) both;
+.ak-sidebar-backdrop {
+  position: fixed; inset: 0; z-index: 80; width: 100%; height: 100%; margin: 0; padding: 0; border: 0;
+  background: rgba(8, 15, 53, .65); backdrop-filter: blur(4px); cursor: pointer;
 }
-.ak-profile-caption { display: grid; gap: 5px; padding: 12px; margin-bottom: 5px; border-bottom: 1px solid var(--ak-border); }
-.ak-profile-caption strong { color: var(--ak-text); font-size: 13px; overflow-wrap: anywhere; }
-.ak-profile-caption small { color: var(--ak-muted); font-size: 11px; }
-#header .ak-profile-link, #header .ak-profile-panel #logout-form button {
-  display: flex; align-items: center; justify-content: flex-start; gap: 10px; width: 100%; min-height: 40px; padding: 10px 12px;
-  box-sizing: border-box; border: 0; border-radius: 8px; color: var(--ak-text); background: transparent;
-  font: inherit; font-size: 12px; text-transform: none; text-decoration: none;
-}
-#header .ak-profile-panel #logout-form { display: block; width: 100%; }
-#header .ak-profile-link:hover, #header .ak-profile-panel #logout-form button:hover { background: var(--ak-primary-soft); color: var(--ak-primary-text); }
-#header .ak-profile-panel .ak-icon { width: 17px; height: 17px; }
-.ak-theme-switcher { display: inline-flex; align-items: stretch; gap: 3px; }
-.ak-theme-menu { display: none; }
-.ak-admin-enhanced .ak-theme-menu { display: block; }
-.ak-theme-trigger { display: grid; place-items: center; box-sizing: border-box; width: 24px; height: 36px; border: 1px solid var(--ak-border); border-radius: 7px; color: var(--ak-muted); }
-.ak-theme-trigger .ak-icon { width: 12px; height: 12px; transition: transform 180ms ease; }
-.ak-theme-trigger:hover { background: var(--ak-card-muted); }
-.ak-theme-options { width: 195px; }
-.ak-theme-options p { margin: 4px 10px 8px; color: var(--ak-muted); font-size: 11px; }
-.ak-theme-options button {
-  display: flex; align-items: center; gap: 11px; box-sizing: border-box; width: 100%;
-  min-height: 40px; padding: 10px; border: 0; border-radius: 8px;
-  background: transparent; color: var(--ak-text); font: inherit; font-size: 12px; cursor: pointer;
-  transition: background-color 160ms ease, transform 150ms ease;
-}
-.ak-theme-options button .ak-icon { width: 17px; height: 17px; }
-.ak-theme-options button:hover { background: var(--ak-card-muted); }
-.ak-theme-options button[aria-pressed="true"] { background: var(--ak-primary-soft); color: var(--ak-primary-text); font-weight: 650; }
-.ak-theme-options button[aria-pressed="true"]::after { content: "✓"; margin-left: auto; }
-.ak-theme-options button:active { transform: scale(.98); }
-
-/* Use Django's existing sidebar state and permission-filtered model list. */
-.ak-sidebar-enhanced #toggle-nav-sidebar { display: none; }
-.ak-sidebar-enhanced .main > #nav-sidebar + .content { max-width: 100%; }
-.ak-sidebar-enhanced .main.shifted > #nav-sidebar + .content { max-width: calc(100% - 276px); }
-.ak-sidebar-enhanced #nav-sidebar { transition: margin-left 220ms var(--ak-ease), visibility 0s 220ms, background-color 220ms ease; }
-.ak-sidebar-enhanced .main.shifted > #nav-sidebar { transition-delay: 0s; }
-#nav-sidebar .module caption { position: relative; padding-right: 38px; }
-.ak-submenu-toggle { position: absolute; top: 50%; right: 7px; display: grid; place-items: center; width: 26px; height: 26px; padding: 5px; border: 0; border-radius: 6px; color: var(--ak-muted); background: transparent; cursor: pointer; transform: translateY(-50%); }
-.ak-submenu-toggle:hover { color: var(--ak-primary-text); background: var(--ak-primary-soft); }
-.ak-submenu-toggle .ak-icon { width: 14px; height: 14px; transition: transform 180ms ease; }
-.ak-submenu-toggle[aria-expanded="false"] .ak-icon { transform: rotate(-90deg); }
-#nav-sidebar .current-model th { box-shadow: inset 3px 0 var(--ak-brand); }
-.ak-sidebar-backdrop { position: fixed; inset: 0; z-index: 80; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; border-radius: 0; background: rgba(6, 9, 32, .45); cursor: pointer; animation: ak-backdrop-enter 180ms ease both; }
 .ak-sidebar-backdrop[hidden] { display: none; }
 .ak-drawer-open, .ak-drawer-open body { overflow: hidden; }
 
-.ak-chart-tooltip { position: fixed; z-index: 100; display: grid; gap: 7px; min-width: 155px; max-width: calc(100vw - 24px); box-sizing: border-box; padding: 12px 14px; border: 1px solid var(--ak-border); border-radius: 10px; background: var(--ak-card); box-shadow: var(--ak-shadow-hover); color: var(--ak-text); font-size: 12px; pointer-events: none; animation: ak-menu-enter 150ms ease both; }
-.ak-chart-tooltip[hidden] { display: none; }
-.ak-chart-tooltip strong { font-size: 12px; color: var(--ak-text); margin-bottom: 3px; }
-.ak-tooltip-completed { color: var(--ak-success); }
-.ak-tooltip-failed { color: var(--ak-danger); }
-
-ul.messagelist li { position: relative; padding-right: 46px; animation: ak-notice-enter 250ms var(--ak-ease) both; }
-.ak-notice-dismiss { position: absolute; top: 50%; right: 10px; display: grid; place-items: center; width: 28px; height: 28px; padding: 5px; border: 0; border-radius: 7px; color: inherit; background: transparent; cursor: pointer; transform: translateY(-50%); }
-.ak-notice-dismiss:hover { background: var(--ak-card-muted); }
-.ak-notice-dismiss .ak-icon { width: 16px; height: 16px; }
-
-@keyframes ak-page-enter { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes ak-menu-enter { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes ak-notice-enter { from { opacity: 0; transform: translateY(-7px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes ak-backdrop-enter { from { opacity: 0; } to { opacity: 1; } }
-
 @media (max-width: 767px) {
-  .ak-profile-panel { left: 0; right: auto; }
+  .ak-profile-panel { left: auto; right: 0; }
   .ak-sidebar-enhanced #nav-sidebar {
     display: block; position: fixed; inset: 0 auto 0 0; z-index: 90;
-    width: min(290px, calc(100vw - 42px)); max-height: 100svh; height: 100svh;
-    box-sizing: border-box; margin-left: 0 !important; margin-right: 0 !important;
+    width: min(300px, calc(100vw - 42px)); max-height: 100svh; height: 100svh;
+    box-sizing: border-box; margin: 0 !important;
     transform: translateX(-105%); visibility: hidden;
     transition: transform 220ms var(--ak-ease), visibility 0s 220ms;
+    box-shadow: 10px 0 30px rgba(0, 0, 0, .4);
   }
   .ak-sidebar-enhanced .main.shifted > #nav-sidebar { transform: translateX(0); visibility: visible; transition-delay: 0s; }
   .ak-sidebar-enhanced .main.shifted > #nav-sidebar + .content { max-width: 100%; }
-}
-@media (max-width: 380px) {
-  .ak-theme-trigger { height: 36px; width: 22px; }
-  #header .ak-profile-chevron .ak-icon { width: 11px; }
-  #header .ak-user-identity { gap: 6px; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
-  #content-start, .ak-profile-panel, .ak-theme-options, .ak-chart-tooltip,
-  ul.messagelist li, .ak-sidebar-backdrop { animation: none; }
-  body, #header, #nav-sidebar, .ak-sidebar, .ak-panel, .ak-stat-card, #toolbar,
-  #changelist-filter, fieldset.module, .ak-admin-empty, .ak-table th, .ak-table td,
-  .ak-profile-panel, .ak-theme-options, .ak-profile-chevron .ak-icon,
-  .ak-theme-trigger, .ak-theme-trigger .ak-icon, .ak-theme-options button,
-  .ak-submenu-toggle .ak-icon { transition: none !important; }
 }

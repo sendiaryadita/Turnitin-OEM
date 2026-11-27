@@ -9,7 +9,7 @@
 
 {% block extrastyle %}
 {{ block.super }}
-<link rel="stylesheet" href="{% static 'detector/antikopas_dashboard.css' %}?v=22">
+<link rel="stylesheet" href="{% static 'detector/antikopas_dashboard.css' %}?v=23">
 {% endblock %}
 
 {% block breadcrumbs %}{% endblock %}
@@ -202,6 +202,10 @@
                     <span>
                         <i class="ak-legend-dot ak-failed-dot"></i>
                         Gagal
+                    </span>
+
+                    <span class="ak-mobile-scroll-hint" aria-hidden="true">
+                        {% include "admin/partials/ak_icon.html" with name="arrow" %} Geser grafik
                     </span>
 
                 </div>
